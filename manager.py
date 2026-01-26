@@ -4,7 +4,7 @@ PGA Tour Leaderboard Plugin for LEDMatrix
 Displays the top players from the current PGA Tour leaderboard using ESPN data.
 Shows tournaments within a configurable date range and refreshes at user-defined intervals.
 
-API Version: 1.1.0
+API Version: 1.1.1
 """
 
 import logging
@@ -121,9 +121,9 @@ class PGATourLeaderboardPlugin(BasePlugin):
                     return
 
             # Fetch current PGA Tour events
-            cache_key = f"{self.plugin_id}_pga_leaderboard"
+            cache_key = f"{self.plugin_id}_pga_scoreboard"
             data = self.api_helper.get(
-                url="https://site.api.espn.com/apis/site/v2/sports/golf/pga/leaderboard",
+                url="https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard",
                 cache_key=cache_key,
                 cache_ttl=self.update_interval_seconds
             )
@@ -316,7 +316,7 @@ class PGATourLeaderboardPlugin(BasePlugin):
 
                 cache_key = f"{self.plugin_id}_pga_previous_{date_str}"
                 data = self.api_helper.get(
-                    url=f"https://site.api.espn.com/apis/site/v2/sports/golf/pga/leaderboard",
+                    url=f"https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard",
                     params={'dates': date_str},
                     cache_key=cache_key,
                     cache_ttl=86400  # Cache for 24 hours

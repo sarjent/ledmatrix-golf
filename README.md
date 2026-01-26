@@ -5,7 +5,8 @@ A custom plugin for the [LEDMatrix project](https://github.com/ryderdamen/LEDMat
 ## Features
 
 - 📊 Displays top 10 players (configurable) from current PGA Tour tournaments
-- 🔙 **NEW v1.1.0**: Falls back to showing top 5 from the most recent completed tournament when no current tournament is available
+- 🔙 **v1.1.0**: Falls back to showing top 5 from the most recent completed tournament when no current tournament is available
+- 🐛 **v1.1.1**: Fixed API endpoint to use scoreboard instead of leaderboard
 - 🗓️ Automatically filters tournaments within a configurable date range (default: 7 days)
 - 🔄 Configurable refresh interval (default: 10 minutes, adjustable up to 60 minutes)
 - 🎨 User-configurable font size, font style, and colors
@@ -205,10 +206,12 @@ sudo journalctl -u ledmatrix -f | grep pga-tour
 
 This plugin uses ESPN's public API endpoint:
 ```
-https://site.api.espn.com/apis/site/v2/sports/golf/pga/leaderboard
+https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard
 ```
 
 **Note**: This is an unofficial API. ESPN does not officially support or document this endpoint, and it may change without notice. For production use or guaranteed reliability, consider using an official golf API service like [SportsDataIO](https://sportsdata.io/) or [Sportradar](https://sportradar.com/).
+
+**Update v1.1.1**: Changed from `/leaderboard` to `/scoreboard` endpoint as the leaderboard endpoint was returning 404 errors.
 
 ## Development
 
@@ -231,7 +234,7 @@ To test the plugin locally:
 ```python
 # Test ESPN API connection
 import requests
-response = requests.get('https://site.api.espn.com/apis/site/v2/sports/golf/pga/leaderboard')
+response = requests.get('https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard')
 print(response.json())
 ```
 
