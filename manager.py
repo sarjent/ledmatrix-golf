@@ -4,7 +4,7 @@ PGA Tour Leaderboard Plugin for LEDMatrix
 Displays the top players from the current PGA Tour leaderboard using ESPN data.
 Shows tournaments within a configurable date range and refreshes at user-defined intervals.
 
-API Version: 1.0.0
+API Version: 1.1.0
 """
 
 import logging
@@ -28,6 +28,7 @@ class PGATourLeaderboardPlugin(BasePlugin):
         display_duration (float): Display duration in seconds (default: 15)
         update_interval (int): Data refresh interval in seconds (default: 600)
         max_players (int): Maximum number of players to display (default: 10)
+        fallback_players (int): Number of players from previous tournament to show (default: 5)
         tournament_date_range (int): Days to look ahead for tournaments (default: 7)
         font_size (int): Font size for text (default: 6)
         font_name (str): Font file name (default: "4x6-font.ttf")
@@ -60,6 +61,8 @@ class PGATourLeaderboardPlugin(BasePlugin):
         # State tracking
         self.current_tournament = None
         self.leaderboard_data = []
+        self.previous_tournament = None
+        self.previous_leaderboard_data = []
         self.last_update = None
         self.current_player_index = 0
 
@@ -68,6 +71,7 @@ class PGATourLeaderboardPlugin(BasePlugin):
     def _load_config(self) -> None:
         """Load and validate configuration."""
         self.max_players = self.config.get('max_players', 10)
+        self.fallback_players = self.config.get('fallback_players', 5)
         self.tournament_date_range = self.config.get('tournament_date_range', 7)
         self.update_interval_seconds = self.config.get('update_interval', 600)
         self.font_size = self.config.get('font_size', 6)
@@ -130,6 +134,12 @@ class PGATourLeaderboardPlugin(BasePlugin):
 
             # Process the data
             self._process_tournament_data(data)
+
+            # If no current tournament found, try to fetch previous tournament as fallback
+            if not self.current_tournament:
+                self.logger.info("No current tournament found, fetching previous tournament as fallback")
+                self._fetch_previous_tournament()
+
             self.last_update = datetime.now()
 
             if self.current_tournament:
@@ -137,8 +147,13 @@ class PGATourLeaderboardPlugin(BasePlugin):
                     f"Updated PGA Tour data: {self.current_tournament['name']} "
                     f"({len(self.leaderboard_data)} players)"
                 )
+            elif self.previous_tournament:
+                self.logger.info(
+                    f"Using previous tournament: {self.previous_tournament['name']} "
+                    f"({len(self.previous_leaderboard_data)} players)"
+                )
             else:
-                self.logger.info("No active tournaments found within date range")
+                self.logger.info("No active or previous tournaments found")
 
         except Exception as e:
             self.logger.error(f"Error updating PGA Tour data: {e}", exc_info=True)
@@ -286,6 +301,112 @@ class PGATourLeaderboardPlugin(BasePlugin):
             self.logger.debug(f"Error getting score display: {e}")
             return "E"
 
+    def _fetch_previous_tournament(self) -> None:
+        """
+        Fetch the most recent completed tournament as fallback.
+        Looks back up to 30 days for a completed tournament.
+        """
+        try:
+            today = datetime.now()
+
+            # Try fetching data from previous weeks
+            for days_back in range(7, 31, 7):  # Check 7, 14, 21, 28 days back
+                date_to_check = today - timedelta(days=days_back)
+                date_str = date_to_check.strftime('%Y%m%d')
+
+                cache_key = f"{self.plugin_id}_pga_previous_{date_str}"
+                data = self.api_helper.get(
+                    url=f"https://site.api.espn.com/apis/site/v2/sports/golf/pga/leaderboard",
+                    params={'dates': date_str},
+                    cache_key=cache_key,
+                    cache_ttl=86400  # Cache for 24 hours
+                )
+
+                if not data:
+                    continue
+
+                events = data.get('events', [])
+                if not events:
+                    continue
+
+                # Look for completed tournament
+                for event in events:
+                    event_status = event.get('status', {}).get('type', {}).get('state', '')
+                    if event_status == 'post':  # Tournament is completed
+                        self._process_previous_tournament(event)
+                        if self.previous_tournament:
+                            return
+
+            self.logger.info("No previous tournaments found in the last 30 days")
+
+        except Exception as e:
+            self.logger.error(f"Error fetching previous tournament: {e}", exc_info=True)
+
+    def _process_previous_tournament(self, event: Dict) -> None:
+        """
+        Process previous tournament data for fallback display.
+
+        Args:
+            event: Tournament event dictionary from ESPN API
+        """
+        try:
+            # Extract tournament info
+            self.previous_tournament = {
+                'name': event.get('name', 'PGA Tour'),
+                'date': event.get('date', ''),
+                'status': 'completed'
+            }
+
+            # Extract leaderboard from competition
+            competitions = event.get('competitions', [])
+            if not competitions:
+                self.previous_tournament = None
+                self.previous_leaderboard_data = []
+                return
+
+            competition = competitions[0]
+            competitors = competition.get('competitors', [])
+
+            # Sort by position and extract top players (limited to fallback_players)
+            sorted_competitors = sorted(
+                competitors,
+                key=lambda x: self._parse_position(x.get('sortOrder', 999))
+            )
+
+            self.previous_leaderboard_data = []
+            for competitor in sorted_competitors[:self.fallback_players]:
+                try:
+                    athlete = competitor.get('athlete', {})
+                    stats = competitor.get('statistics', [])
+
+                    # Extract score/position
+                    position = competitor.get('sortOrder', '')
+                    score_display = self._get_score_display(competitor, stats)
+
+                    player_data = {
+                        'position': position,
+                        'name': athlete.get('displayName', 'Unknown'),
+                        'short_name': athlete.get('shortName', athlete.get('displayName', 'Unknown')),
+                        'score': score_display,
+                        'status': competitor.get('status', '')
+                    }
+
+                    self.previous_leaderboard_data.append(player_data)
+
+                except Exception as e:
+                    self.logger.debug(f"Error processing previous tournament competitor: {e}")
+                    continue
+
+            self.logger.info(
+                f"Loaded previous tournament: {self.previous_tournament['name']} "
+                f"with {len(self.previous_leaderboard_data)} players"
+            )
+
+        except Exception as e:
+            self.logger.error(f"Error processing previous tournament: {e}", exc_info=True)
+            self.previous_tournament = None
+            self.previous_leaderboard_data = []
+
     def display(self, force_clear: bool = False) -> None:
         """
         Display the PGA Tour leaderboard.
@@ -297,8 +418,20 @@ class PGATourLeaderboardPlugin(BasePlugin):
             if force_clear:
                 self.display_manager.clear()
 
-            # Check if we have data to display
-            if not self.current_tournament or not self.leaderboard_data:
+            # Determine which data to display (current or previous tournament)
+            tournament = None
+            leaderboard = []
+            is_previous = False
+
+            if self.current_tournament and self.leaderboard_data:
+                tournament = self.current_tournament
+                leaderboard = self.leaderboard_data
+                is_previous = False
+            elif self.previous_tournament and self.previous_leaderboard_data:
+                tournament = self.previous_tournament
+                leaderboard = self.previous_leaderboard_data
+                is_previous = True
+            else:
                 self._display_no_data()
                 return
 
@@ -306,8 +439,9 @@ class PGATourLeaderboardPlugin(BasePlugin):
             img = Image.new('RGB', (self.display_width, self.display_height), (0, 0, 0))
             draw = ImageDraw.Draw(img)
 
-            # Draw tournament name at the top
-            tournament_name = self._truncate_text(self.current_tournament['name'], 32)
+            # Draw tournament name at the top with "PREV:" prefix if showing previous tournament
+            tournament_prefix = "PREV: " if is_previous else ""
+            tournament_name = self._truncate_text(f"{tournament_prefix}{tournament['name']}", 32)
             draw.text((2, 1), tournament_name, font=self.font, fill=self.text_color)
 
             # Draw leaderboard (starting at y=10 to leave room for tournament name)
@@ -317,13 +451,13 @@ class PGATourLeaderboardPlugin(BasePlugin):
             # Calculate how many players we can fit on screen
             available_height = self.display_height - y_offset - 2
             max_visible_players = min(
-                len(self.leaderboard_data),
+                len(leaderboard),
                 available_height // line_height
             )
 
             # Display players
             for i in range(max_visible_players):
-                player = self.leaderboard_data[i]
+                player = leaderboard[i]
                 y_pos = y_offset + (i * line_height)
 
                 # Determine color (highlight leader/top 3)
@@ -341,7 +475,8 @@ class PGATourLeaderboardPlugin(BasePlugin):
             self.display_manager.image = img
             self.display_manager.update_display()
 
-            self.logger.debug(f"Displayed PGA Tour leaderboard: {self.current_tournament['name']}")
+            tournament_type = "previous" if is_previous else "current"
+            self.logger.debug(f"Displayed {tournament_type} PGA Tour leaderboard: {tournament['name']}")
 
         except Exception as e:
             self.logger.error(f"Error displaying leaderboard: {e}", exc_info=True)
@@ -453,6 +588,8 @@ class PGATourLeaderboardPlugin(BasePlugin):
         info.update({
             'current_tournament': self.current_tournament.get('name') if self.current_tournament else None,
             'players_count': len(self.leaderboard_data),
+            'previous_tournament': self.previous_tournament.get('name') if self.previous_tournament else None,
+            'previous_players_count': len(self.previous_leaderboard_data),
             'last_update': self.last_update.isoformat() if self.last_update else None
         })
         return info
@@ -476,4 +613,6 @@ class PGATourLeaderboardPlugin(BasePlugin):
         """Cleanup resources when plugin is unloaded."""
         self.leaderboard_data = []
         self.current_tournament = None
+        self.previous_leaderboard_data = []
+        self.previous_tournament = None
         self.logger.info("PGA Tour Leaderboard plugin cleaned up")

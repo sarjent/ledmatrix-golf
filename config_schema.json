@@ -30,6 +30,13 @@
       "minimum": 1,
       "maximum": 20
     },
+    "fallback_players": {
+      "type": "integer",
+      "description": "Number of players to show from previous tournament when no current tournament is available",
+      "default": 5,
+      "minimum": 1,
+      "maximum": 20
+    },
     "tournament_date_range": {
       "type": "integer",
       "description": "Number of days to look ahead for tournaments (from today)",

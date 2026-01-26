@@ -5,6 +5,7 @@ A custom plugin for the [LEDMatrix project](https://github.com/ryderdamen/LEDMat
 ## Features
 
 - 📊 Displays top 10 players (configurable) from current PGA Tour tournaments
+- 🔙 **NEW v1.1.0**: Falls back to showing top 5 from the most recent completed tournament when no current tournament is available
 - 🗓️ Automatically filters tournaments within a configurable date range (default: 7 days)
 - 🔄 Configurable refresh interval (default: 10 minutes, adjustable up to 60 minutes)
 - 🎨 User-configurable font size, font style, and colors
@@ -69,6 +70,7 @@ plugins:
     display_duration: 15
     update_interval: 600  # 10 minutes
     max_players: 10
+    fallback_players: 5  # Players to show from previous tournament
     tournament_date_range: 7  # Look ahead 7 days
     font_size: 6
     font_name: "4x6-font.ttf"
@@ -96,6 +98,7 @@ sudo systemctl restart ledmatrix
 | `display_duration` | number | `15` | How long to display the leaderboard (seconds) |
 | `update_interval` | number | `600` | How often to refresh data from ESPN (seconds, 60-3600) |
 | `max_players` | integer | `10` | Maximum number of players to display (1-20) |
+| `fallback_players` | integer | `5` | Number of players from previous tournament to show as fallback (1-20) |
 | `tournament_date_range` | integer | `7` | Number of days to look ahead for tournaments (0-30) |
 | `font_size` | integer | `6` | Font size for text (4-12) |
 | `font_name` | string | `"4x6-font.ttf"` | Font file to use (from assets/fonts) |
@@ -137,12 +140,15 @@ highlight_color:
 
 1. **Data Fetching**: The plugin fetches PGA Tour leaderboard data from ESPN's public API
 2. **Tournament Filtering**: It automatically filters to show only tournaments within your configured date range (e.g., today + 7 days)
-3. **Leaderboard Display**: Shows player position, name, and score (e.g., "1. J.Smith -5")
-4. **Highlighting**: The top 3 players are displayed in the highlight color
-5. **Caching**: API responses are cached to respect the update interval and minimize requests
+3. **Fallback Mode**: If no current tournament is found, the plugin automatically searches for the most recent completed tournament (looks back up to 30 days) and displays the top finishers
+4. **Leaderboard Display**: Shows player position, name, and score (e.g., "1. J.Smith -5")
+   - When showing a previous tournament, the display shows "PREV:" before the tournament name
+5. **Highlighting**: The top 3 players are displayed in the highlight color
+6. **Caching**: API responses are cached to respect the update interval and minimize requests
 
 ## Display Format
 
+**Current Tournament:**
 ```
 Tournament Name
 1. J.Smith -5
@@ -155,6 +161,16 @@ Tournament Name
 8. G.Miller +2
 9. H.Wilson +3
 10. I.Moore +4
+```
+
+**Previous Tournament (Fallback):**
+```
+PREV: Tournament Name
+1. J.Smith -12
+2. A.Jones -10
+3. B.Lee -8
+4. C.Park -7
+5. D.Kim -6
 ```
 
 ## Troubleshooting

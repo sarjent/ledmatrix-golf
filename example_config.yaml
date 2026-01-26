@@ -14,6 +14,7 @@ plugins:
 
     # Leaderboard settings
     max_players: 10  # number of players to show (1-20)
+    fallback_players: 5  # players from previous tournament to show as fallback (1-20)
     tournament_date_range: 7  # days ahead to search for tournaments (0-30)
 
     # Font settings
