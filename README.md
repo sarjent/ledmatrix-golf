@@ -5,6 +5,7 @@ A custom plugin for the [LEDMatrix project](https://github.com/ryderdamen/LEDMat
 ## Features
 
 - 📊 Displays top 10 players (configurable) from current PGA Tour tournaments
+- 🎬 **v1.2.0**: Added horizontal scrolling display with PGA Tour logo
 - 🔙 **v1.1.0**: Falls back to showing top 5 from the most recent completed tournament when no current tournament is available
 - 🐛 **v1.1.1**: Fixed API endpoint to use scoreboard instead of leaderboard
 - 🗓️ Automatically filters tournaments within a configurable date range (default: 7 days)
@@ -142,37 +143,35 @@ highlight_color:
 1. **Data Fetching**: The plugin fetches PGA Tour leaderboard data from ESPN's public API
 2. **Tournament Filtering**: It automatically filters to show only tournaments within your configured date range (e.g., today + 7 days)
 3. **Fallback Mode**: If no current tournament is found, the plugin automatically searches for the most recent completed tournament (looks back up to 30 days) and displays the top finishers
-4. **Leaderboard Display**: Shows player position, name, and score (e.g., "1. J.Smith -5")
-   - When showing a previous tournament, the display shows "PREV:" before the tournament name
-5. **Highlighting**: The top 3 players are displayed in the highlight color
-6. **Caching**: API responses are cached to respect the update interval and minimize requests
+4. **Leaderboard Display**: Shows player position, name, and score scrolling horizontally right-to-left
+   - PGA Tour logo appears at the beginning of the scroll
+   - Tournament name followed by all players separated by " | "
+   - When showing a previous tournament, displays "PREV:" before the tournament name
+5. **Highlighting**: The tournament name and top 3 players are displayed in the highlight color (gold by default)
+6. **Scrolling**: Smooth horizontal scrolling animation at 120 FPS for readability
+7. **Caching**: API responses are cached to respect the update interval and minimize requests
 
 ## Display Format
 
-**Current Tournament:**
+The leaderboard scrolls horizontally from right to left across the display.
+
+**Current Tournament (Scrolling):**
 ```
-Tournament Name
-1. J.Smith -5
-2. A.Jones -4
-3. B.Lee -3
-4. C.Park -2
-5. D.Kim -1
-6. E.Brown E
-7. F.Davis +1
-8. G.Miller +2
-9. H.Wilson +3
-10. I.Moore +4
+[PGA Logo] Tournament Name | 1. J.Smith -5 | 2. A.Jones -4 | 3. B.Lee -3 | ... | 10. I.Moore +4
 ```
 
-**Previous Tournament (Fallback):**
+**Previous Tournament Fallback (Scrolling):**
 ```
-PREV: Tournament Name
-1. J.Smith -12
-2. A.Jones -10
-3. B.Lee -8
-4. C.Park -7
-5. D.Kim -6
+[PGA Logo] PREV: Tournament Name | 1. J.Smith -12 | 2. A.Jones -10 | 3. B.Lee -8 | 4. C.Park -7 | 5. D.Kim -6
 ```
+
+**Visual Display:**
+- PGA Tour logo (20px) at the start
+- Tournament name in white
+- Top 3 players highlighted in gold
+- Remaining players in white
+- Smooth scrolling animation
+- Separator " | " between entries
 
 ## Troubleshooting
 
@@ -213,6 +212,34 @@ https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard
 
 **Update v1.1.1**: Changed from `/leaderboard` to `/scoreboard` endpoint as the leaderboard endpoint was returning 404 errors.
 
+## PGA Tour Logo
+
+The plugin displays the PGA Tour logo at the beginning of the scrolling leaderboard.
+
+**Logo File Location:**
+```
+assets/sports/pga_logos/pga_logo.png
+```
+
+**Setup Instructions:**
+1. Download or create a PGA Tour logo (PNG format, 20x28px recommended)
+2. Create the directory on your Raspberry Pi:
+   ```bash
+   mkdir -p /path/to/LEDMatrix/assets/sports/pga_logos
+   ```
+3. Upload the logo file:
+   ```bash
+   scp pga_logo.png pi@your-pi-ip:/path/to/LEDMatrix/assets/sports/pga_logos/
+   ```
+4. Set permissions:
+   ```bash
+   chmod 644 /path/to/LEDMatrix/assets/sports/pga_logos/pga_logo.png
+   ```
+
+**Note**: See [PGA_LOGO_README.md](PGA_LOGO_README.md) for detailed logo setup instructions, troubleshooting, and requirements.
+
+If the logo file is not found, the plugin will log a warning and display the leaderboard without the logo.
+
 ## Development
 
 ### Project Structure
@@ -224,7 +251,10 @@ ledmatrix-golf/
 ├── manager.py             # Main plugin implementation
 ├── requirements.txt       # Python dependencies
 ├── README.md             # This file
-└── plan.md               # Original requirements
+├── PGA_LOGO_README.md    # PGA Tour logo setup instructions
+├── plan.md               # Original requirements
+├── test_api.py           # API testing script
+└── quick_test.sh         # Quick bash test script
 ```
 
 ### Testing

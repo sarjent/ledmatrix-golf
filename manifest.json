@@ -1,9 +1,9 @@
 {
   "id": "pga-tour-leaderboard",
   "name": "PGA Tour Leaderboard",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "author": "Custom Plugin",
-  "description": "Displays the top 10 players from the current PGA Tour leaderboard using ESPN data. Shows tournaments within 7 days of today's date. Falls back to showing top 5 from the most recent completed tournament when no current tournament is available.",
+  "description": "Displays the top 10 players from the current PGA Tour leaderboard using ESPN data with horizontal scrolling. Shows PGA Tour logo and tournament information. Falls back to showing top 5 from the most recent completed tournament when no current tournament is available.",
   "entry_point": "manager.py",
   "class_name": "PGATourLeaderboardPlugin",
   "category": "sports",

@@ -4,7 +4,7 @@ PGA Tour Leaderboard Plugin for LEDMatrix
 Displays the top players from the current PGA Tour leaderboard using ESPN data.
 Shows tournaments within a configurable date range and refreshes at user-defined intervals.
 
-API Version: 1.1.1
+API Version: 1.2.0
 """
 
 import logging
@@ -14,7 +14,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from PIL import Image, ImageDraw, ImageFont
 
 from src.plugin_system.base_plugin import BasePlugin
-from src.common import APIHelper, TextHelper
+from src.common import APIHelper, TextHelper, ScrollHelper, LogoHelper
 
 logger = logging.getLogger(__name__)
 
@@ -51,12 +51,25 @@ class PGATourLeaderboardPlugin(BasePlugin):
             logger=self.logger
         )
         self.text_helper = TextHelper(logger=self.logger)
+        self.scroll_helper = ScrollHelper(
+            display_width=self.display_width,
+            display_height=self.display_height,
+            logger=self.logger
+        )
+        self.logo_helper = LogoHelper(
+            display_width=self.display_width,
+            display_height=self.display_height,
+            logger=self.logger
+        )
 
         # Load configuration
         self._load_config()
 
         # Load fonts
         self._load_fonts()
+
+        # Load PGA Tour logo
+        self._load_logo()
 
         # State tracking
         self.current_tournament = None
@@ -65,6 +78,7 @@ class PGATourLeaderboardPlugin(BasePlugin):
         self.previous_leaderboard_data = []
         self.last_update = None
         self.current_player_index = 0
+        self.scroll_image = None
 
         self.logger.info("PGA Tour Leaderboard plugin initialized")
 
@@ -106,6 +120,25 @@ class PGATourLeaderboardPlugin(BasePlugin):
         except Exception as e:
             self.logger.error(f"Error loading font: {e}")
             self.font = ImageFont.load_default()
+
+    def _load_logo(self) -> None:
+        """Load the PGA Tour logo."""
+        try:
+            logo_path = Path("assets/sports/pga_logos/pga_logo.png")
+            self.pga_logo = self.logo_helper.load_logo(
+                "PGA",
+                logo_path,
+                max_width=20,
+                max_height=self.display_height - 4
+            )
+            if self.pga_logo:
+                self.logger.debug(f"Loaded PGA Tour logo from {logo_path}")
+            else:
+                self.logger.warning(f"PGA Tour logo not found at {logo_path}")
+                self.pga_logo = None
+        except Exception as e:
+            self.logger.error(f"Error loading PGA Tour logo: {e}")
+            self.pga_logo = None
 
     def update(self) -> None:
         """
@@ -409,7 +442,7 @@ class PGATourLeaderboardPlugin(BasePlugin):
 
     def display(self, force_clear: bool = False) -> None:
         """
-        Display the PGA Tour leaderboard.
+        Display the PGA Tour leaderboard with horizontal scrolling.
 
         Args:
             force_clear: If True, clear display before rendering
@@ -435,52 +468,102 @@ class PGATourLeaderboardPlugin(BasePlugin):
                 self._display_no_data()
                 return
 
-            # Create display image
-            img = Image.new('RGB', (self.display_width, self.display_height), (0, 0, 0))
-            draw = ImageDraw.Draw(img)
+            # Create or update the scrolling image
+            if self.scroll_image is None or force_clear:
+                self.scroll_image = self._create_scroll_image(tournament, leaderboard, is_previous)
+                self.scroll_helper.set_image(self.scroll_image)
 
-            # Draw tournament name at the top with "PREV:" prefix if showing previous tournament
-            tournament_prefix = "PREV: " if is_previous else ""
-            tournament_name = self._truncate_text(f"{tournament_prefix}{tournament['name']}", 32)
-            draw.text((2, 1), tournament_name, font=self.font, fill=self.text_color)
-
-            # Draw leaderboard (starting at y=10 to leave room for tournament name)
-            y_offset = 10
-            line_height = self.font_size + 2
-
-            # Calculate how many players we can fit on screen
-            available_height = self.display_height - y_offset - 2
-            max_visible_players = min(
-                len(leaderboard),
-                available_height // line_height
-            )
-
-            # Display players
-            for i in range(max_visible_players):
-                player = leaderboard[i]
-                y_pos = y_offset + (i * line_height)
-
-                # Determine color (highlight leader/top 3)
-                color = self.highlight_color if i < 3 else self.text_color
-
-                # Format: "1. J.Smith -5"
-                position = player['position']
-                name = self._truncate_text(player['short_name'], 12)
-                score = player['score']
-
-                line_text = f"{position}. {name} {score}"
-                draw.text((2, y_pos), line_text, font=self.font, fill=color)
+            # Get next frame from scroll helper
+            frame = self.scroll_helper.get_next_frame()
 
             # Update display
-            self.display_manager.image = img
+            self.display_manager.image = frame
             self.display_manager.update_display()
 
             tournament_type = "previous" if is_previous else "current"
-            self.logger.debug(f"Displayed {tournament_type} PGA Tour leaderboard: {tournament['name']}")
+            self.logger.debug(f"Scrolling {tournament_type} PGA Tour leaderboard: {tournament['name']}")
 
         except Exception as e:
             self.logger.error(f"Error displaying leaderboard: {e}", exc_info=True)
             self._display_error()
+
+    def _create_scroll_image(self, tournament: Dict, leaderboard: List[Dict], is_previous: bool) -> Image.Image:
+        """
+        Create the scrolling image with PGA logo and leaderboard.
+
+        Args:
+            tournament: Tournament data
+            leaderboard: List of player data
+            is_previous: Whether this is a previous tournament
+
+        Returns:
+            PIL Image for scrolling
+        """
+        # Calculate content width
+        logo_width = 24 if self.pga_logo else 0
+        spacing = 4
+
+        # Build the leaderboard text
+        tournament_prefix = "PREV: " if is_previous else ""
+        content_parts = [f"{tournament_prefix}{tournament['name']}"]
+
+        for i, player in enumerate(leaderboard):
+            position = player['position']
+            name = player['short_name']
+            score = player['score']
+            content_parts.append(f"{position}. {name} {score}")
+
+        # Join with separator
+        separator = " | "
+        content_text = separator.join(content_parts)
+
+        # Estimate total width (rough approximation)
+        # Each character is roughly 6 pixels wide with this font
+        char_width = 6
+        text_width = len(content_text) * char_width
+        total_width = logo_width + spacing + text_width + self.display_width  # Add buffer
+
+        # Create the scrolling image
+        img = Image.new('RGB', (total_width, self.display_height), (0, 0, 0))
+        draw = ImageDraw.Draw(img)
+
+        # Draw PGA logo at the start (vertically centered)
+        current_x = 2
+        if self.pga_logo:
+            logo_y = (self.display_height - self.pga_logo.height) // 2
+            img.paste(self.pga_logo, (current_x, logo_y), self.pga_logo if self.pga_logo.mode == 'RGBA' else None)
+            current_x += logo_width + spacing
+
+        # Draw the leaderboard content
+        y_pos = (self.display_height // 2) - (self.font_size // 2)
+
+        # Draw each part with appropriate color
+        for i, part in enumerate(content_parts):
+            # Determine color (highlight first 3 players after tournament name)
+            if i == 0:
+                # Tournament name
+                color = self.text_color
+            elif i <= 3:
+                # Top 3 players
+                color = self.highlight_color
+            else:
+                # Other players
+                color = self.text_color
+
+            draw.text((current_x, y_pos), part, font=self.font, fill=color)
+
+            # Calculate width of this part
+            bbox = draw.textbbox((current_x, y_pos), part, font=self.font)
+            part_width = bbox[2] - bbox[0]
+            current_x += part_width
+
+            # Add separator
+            if i < len(content_parts) - 1:
+                draw.text((current_x, y_pos), separator, font=self.font, fill=self.text_color)
+                sep_bbox = draw.textbbox((current_x, y_pos), separator, font=self.font)
+                current_x += sep_bbox[2] - sep_bbox[0]
+
+        return img
 
     def _display_no_data(self) -> None:
         """Display a message when no tournament data is available."""
@@ -615,4 +698,6 @@ class PGATourLeaderboardPlugin(BasePlugin):
         self.current_tournament = None
         self.previous_leaderboard_data = []
         self.previous_tournament = None
+        self.scroll_image = None
+        self.pga_logo = None
         self.logger.info("PGA Tour Leaderboard plugin cleaned up")
