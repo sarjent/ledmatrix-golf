@@ -567,20 +567,33 @@ class PGATourLeaderboardPlugin(BasePlugin):
                 self._display_no_data()
                 return
 
-            # Create or update the scrolling image
+            # Create or update the scrolling image (players only)
             if self.scroll_image is None or force_clear:
                 self.scroll_image = self._create_scroll_image(tournament, leaderboard, is_previous)
+                # Update scroll helper's display_height to match scroll area (not full display)
+                scroll_height = self.display_height - 8  # Reserve 8 pixels for tournament bar
+                self.scroll_helper.display_height = scroll_height
                 self.scroll_helper.set_scrolling_image(self.scroll_image)
 
             # Update scroll position
             self.scroll_helper.update_scroll_position()
 
             # Get visible portion from scroll helper
-            frame = self.scroll_helper.get_visible_portion()
+            scroll_frame = self.scroll_helper.get_visible_portion()
 
-            # Update display
-            if frame:
-                self.display_manager.image = frame
+            # Create composite image with scrolling players + static tournament name
+            if scroll_frame:
+                composite = Image.new('RGB', (self.display_width, self.display_height), (0, 0, 0))
+
+                # Paste scrolling player data at top
+                composite.paste(scroll_frame, (0, 0))
+
+                # Draw static tournament bar at bottom
+                tournament_bar = self._create_tournament_bar(tournament, is_previous)
+                composite.paste(tournament_bar, (0, self.display_height - 8))
+
+                # Update display
+                self.display_manager.image = composite
                 self.display_manager.update_display()
 
             tournament_type = "previous" if is_previous else "current"
@@ -592,7 +605,8 @@ class PGATourLeaderboardPlugin(BasePlugin):
 
     def _create_scroll_image(self, tournament: Dict, leaderboard: List[Dict], is_previous: bool) -> Image.Image:
         """
-        Create the scrolling image with PGA logo and leaderboard.
+        Create the scrolling image with player standings only.
+        Tournament name is displayed separately in a static bar.
 
         Args:
             tournament: Tournament data
@@ -600,15 +614,13 @@ class PGATourLeaderboardPlugin(BasePlugin):
             is_previous: Whether this is a previous tournament
 
         Returns:
-            PIL Image for scrolling
+            PIL Image for scrolling (players only)
         """
         # Calculate content width
-        logo_width = 24 if self.pga_logo else 0
         spacing = 4
 
-        # Build the leaderboard text
-        tournament_prefix = "PREV: " if is_previous else ""
-        content_parts = [f"{tournament_prefix}{tournament['name']}"]
+        # Build the leaderboard text (players only, no tournament name)
+        content_parts = []
 
         for i, player in enumerate(leaderboard):
             position = player['position']
@@ -637,29 +649,25 @@ class PGATourLeaderboardPlugin(BasePlugin):
         # Each character is roughly 6 pixels wide with this font
         char_width = 6
         text_width = len(content_text) * char_width
-        total_width = logo_width + spacing + text_width + self.display_width  # Add buffer
+        total_width = text_width + self.display_width  # Add buffer for smooth scrolling
 
-        # Create the scrolling image
-        img = Image.new('RGB', (total_width, self.display_height), (0, 0, 0))
+        # Calculate scroll area height (reserve space for tournament bar)
+        scroll_height = self.display_height - 8
+
+        # Create the scrolling image (players only)
+        img = Image.new('RGB', (total_width, scroll_height), (0, 0, 0))
         draw = ImageDraw.Draw(img)
 
-        # Draw PGA logo at the start (vertically centered)
-        current_x = 2
-        if self.pga_logo:
-            logo_y = (self.display_height - self.pga_logo.height) // 2
-            img.paste(self.pga_logo, (current_x, logo_y), self.pga_logo if self.pga_logo.mode == 'RGBA' else None)
-            current_x += logo_width + spacing
+        # Start drawing player content
+        current_x = self.display_width  # Start offscreen right for smooth entry
 
         # Draw the leaderboard content
-        y_pos = (self.display_height // 2) - (self.font_size // 2)
+        y_pos = (scroll_height // 2) - (self.font_size // 2)
 
         # Draw each part with appropriate color
         for i, part in enumerate(content_parts):
-            # Determine color (highlight first 3 players after tournament name)
-            if i == 0:
-                # Tournament name
-                color = self.text_color
-            elif i <= 3:
+            # Determine color (highlight first 3 players)
+            if i < 3:
                 # Top 3 players
                 color = self.highlight_color
             else:
@@ -680,6 +688,60 @@ class PGATourLeaderboardPlugin(BasePlugin):
                 current_x += sep_bbox[2] - sep_bbox[0]
 
         return img
+
+    def _create_tournament_bar(self, tournament: Dict, is_previous: bool) -> Image.Image:
+        """
+        Create a static bar with tournament name and PGA logo.
+
+        Args:
+            tournament: Tournament data
+            is_previous: Whether this is a previous tournament
+
+        Returns:
+            PIL Image for static tournament bar (8 pixels high)
+        """
+        # Create 8-pixel high bar
+        bar = Image.new('RGB', (self.display_width, 8), (0, 0, 0))
+        draw = ImageDraw.Draw(bar)
+
+        current_x = 2
+
+        # Draw small PGA logo if available (scale down to fit 8px height)
+        if self.pga_logo:
+            # Scale logo to fit 8px height while maintaining aspect ratio
+            logo_height = 6
+            aspect_ratio = self.pga_logo.width / self.pga_logo.height
+            logo_width = int(logo_height * aspect_ratio)
+            small_logo = self.pga_logo.resize((logo_width, logo_height), Image.Resampling.LANCZOS)
+
+            # Paste logo vertically centered in the bar
+            logo_y = (8 - logo_height) // 2
+            bar.paste(small_logo, (current_x, logo_y), small_logo if small_logo.mode == 'RGBA' else None)
+            current_x += logo_width + 3
+
+        # Draw tournament name
+        tournament_prefix = "PREV: " if is_previous else ""
+        tournament_text = f"{tournament_prefix}{tournament['name']}"
+
+        # Use smaller font size for the bar (or truncate if needed)
+        y_pos = 1  # Centered in 8px bar for 6px font
+
+        # Truncate tournament name if it's too long
+        max_width = self.display_width - current_x - 2
+        bbox = draw.textbbox((0, 0), tournament_text, font=self.font)
+        text_width = bbox[2] - bbox[0]
+
+        if text_width > max_width:
+            # Truncate text to fit
+            while len(tournament_text) > 3 and text_width > max_width:
+                tournament_text = tournament_text[:-4] + "..."
+                bbox = draw.textbbox((0, 0), tournament_text, font=self.font)
+                text_width = bbox[2] - bbox[0]
+
+        # Draw tournament name in highlight color
+        draw.text((current_x, y_pos), tournament_text, font=self.font, fill=self.highlight_color)
+
+        return bar
 
     def _display_no_data(self) -> None:
         """Display a message when no tournament data is available."""
