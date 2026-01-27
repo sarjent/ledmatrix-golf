@@ -129,14 +129,17 @@ class PGATourLeaderboardPlugin(BasePlugin):
         """Load the PGA Tour logo."""
         try:
             logo_path = Path("assets/sports/pga_logos/pga_logo.png")
+            # Use larger logo size to match news ticker style
+            # Max height is scroll area (display_height - 8) minus 2px padding
+            scroll_height = self.display_height - 8
             self.pga_logo = self.logo_helper.load_logo(
                 "PGA",
                 logo_path,
-                max_width=20,
-                max_height=self.display_height - 4
+                max_width=36,  # Increased from 20 for better visibility
+                max_height=scroll_height - 2  # Full scroll height minus padding
             )
             if self.pga_logo:
-                self.logger.debug(f"Loaded PGA Tour logo from {logo_path}")
+                self.logger.debug(f"Loaded PGA Tour logo from {logo_path} (size: {self.pga_logo.width}x{self.pga_logo.height})")
             else:
                 self.logger.warning(f"PGA Tour logo not found at {logo_path}")
                 self.pga_logo = None
@@ -617,8 +620,8 @@ class PGATourLeaderboardPlugin(BasePlugin):
             PIL Image for scrolling (logo + players)
         """
         # Calculate content width
-        logo_width = 24 if self.pga_logo else 0
-        spacing = 4
+        logo_width = self.pga_logo.width if self.pga_logo else 0
+        spacing = 6  # Increased spacing for larger logo
 
         # Build the leaderboard text (players only, no tournament name)
         content_parts = []

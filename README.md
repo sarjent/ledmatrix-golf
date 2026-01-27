@@ -5,6 +5,7 @@ A custom plugin for the [LEDMatrix project](https://github.com/ryderdamen/LEDMat
 ## Features
 
 - 📊 Displays top 10 players (configurable) from current PGA Tour tournaments
+- 🏌️ **v1.4.2**: Increased PGA logo size (36px wide) for better visibility, matching news ticker style
 - 🎯 **v1.4.1**: Moved PGA logo to scroll with players, centered tournament name at bottom
 - 🎯 **v1.4.0**: Split-screen display - players scroll on top, tournament name persistent at bottom
 - ⛳ **v1.3.0**: Added holes completed display and asterisk (*) indicator for players currently on the course
@@ -176,7 +177,7 @@ Bottom (static):            PREV: The American Express
 
 **Display Elements:**
 - **Top section**: Scrolling content
-  - **PGA Tour logo** leads the scroll (20px)
+  - **PGA Tour logo** leads the scroll (up to 36px wide, sized to fill scroll area)
   - **Asterisk (*)** prefix indicates player is currently on the course
   - **Holes completed** shown in parentheses: (12) = through 12 holes, (F) = finished round
   - **Top 3 players** highlighted in gold
