@@ -289,11 +289,19 @@ class PGATourLeaderboardPlugin(BasePlugin):
                     position = competitor.get('sortOrder', '')
                     score_display = self._get_score_display(competitor, stats)
 
+                    # Extract holes completed ("thru")
+                    thru_display = self._get_thru_display(stats)
+
+                    # Check if player is currently on the course
+                    is_on_course = self._is_player_on_course(stats)
+
                     player_data = {
                         'position': position,
                         'name': athlete.get('displayName', 'Unknown'),
                         'short_name': athlete.get('shortName', athlete.get('displayName', 'Unknown')),
                         'score': score_display,
+                        'thru': thru_display,
+                        'on_course': is_on_course,
                         'status': competitor.get('status', '')
                     }
 
@@ -352,6 +360,62 @@ class PGATourLeaderboardPlugin(BasePlugin):
         except Exception as e:
             self.logger.debug(f"Error getting score display: {e}")
             return "E"
+
+    def _get_thru_display(self, stats: List[Dict]) -> str:
+        """
+        Get the display string for holes completed.
+
+        Args:
+            stats: Statistics list
+
+        Returns:
+            Thru display string (e.g., "F", "12", "18*" for finished, through 12, etc.)
+        """
+        try:
+            for stat in stats:
+                if stat.get('name') == 'thru':
+                    thru_value = stat.get('displayValue', stat.get('value'))
+                    if thru_value:
+                        return str(thru_value)
+            return "F"  # Default to finished
+
+        except Exception as e:
+            self.logger.debug(f"Error getting thru display: {e}")
+            return "F"
+
+    def _is_player_on_course(self, stats: List[Dict]) -> bool:
+        """
+        Check if player is currently on the course.
+        A player is considered on course if they have started but not finished their round.
+
+        Args:
+            stats: Statistics list
+
+        Returns:
+            True if player is currently on the course, False otherwise
+        """
+        try:
+            thru_value = None
+            for stat in stats:
+                if stat.get('name') == 'thru':
+                    thru_value = stat.get('displayValue', stat.get('value'))
+                    break
+
+            # Player is on course if thru is not "F" (finished) and not empty
+            if thru_value and str(thru_value).upper() != 'F':
+                # Check if it's a valid hole number (indicates they're playing)
+                try:
+                    hole_num = int(str(thru_value))
+                    return 1 <= hole_num <= 18
+                except ValueError:
+                    # If thru contains "*" or other indicators, still check
+                    return '*' in str(thru_value) or str(thru_value).isdigit()
+
+            return False
+
+        except Exception as e:
+            self.logger.debug(f"Error checking if player on course: {e}")
+            return False
 
     def _fetch_previous_tournament(self) -> None:
         """
@@ -443,11 +507,19 @@ class PGATourLeaderboardPlugin(BasePlugin):
                     position = competitor.get('sortOrder', '')
                     score_display = self._get_score_display(competitor, stats)
 
+                    # Extract holes completed ("thru") - will be "F" for completed tournaments
+                    thru_display = self._get_thru_display(stats)
+
+                    # Previous tournaments are completed, so no one is on course
+                    is_on_course = False
+
                     player_data = {
                         'position': position,
                         'name': athlete.get('displayName', 'Unknown'),
                         'short_name': athlete.get('shortName', athlete.get('displayName', 'Unknown')),
                         'score': score_display,
+                        'thru': thru_display,
+                        'on_course': is_on_course,
                         'status': competitor.get('status', '')
                     }
 
@@ -542,7 +614,20 @@ class PGATourLeaderboardPlugin(BasePlugin):
             position = player['position']
             name = player['short_name']
             score = player['score']
-            content_parts.append(f"{position}. {name} {score}")
+            thru = player.get('thru', 'F')
+            on_course = player.get('on_course', False)
+
+            # Add asterisk prefix if player is on course
+            name_prefix = "*" if on_course else ""
+
+            # Build player string with thru info
+            player_str = f"{position}. {name_prefix}{name} {score}"
+
+            # Add thru information if not finished
+            if thru and thru.upper() != 'F':
+                player_str += f" ({thru})"
+
+            content_parts.append(player_str)
 
         # Join with separator
         separator = " | "
