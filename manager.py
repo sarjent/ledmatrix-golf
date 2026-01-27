@@ -605,8 +605,8 @@ class PGATourLeaderboardPlugin(BasePlugin):
 
     def _create_scroll_image(self, tournament: Dict, leaderboard: List[Dict], is_previous: bool) -> Image.Image:
         """
-        Create the scrolling image with player standings only.
-        Tournament name is displayed separately in a static bar.
+        Create the scrolling image with PGA logo and player standings.
+        Tournament name is displayed separately in a static bar at bottom.
 
         Args:
             tournament: Tournament data
@@ -614,9 +614,10 @@ class PGATourLeaderboardPlugin(BasePlugin):
             is_previous: Whether this is a previous tournament
 
         Returns:
-            PIL Image for scrolling (players only)
+            PIL Image for scrolling (logo + players)
         """
         # Calculate content width
+        logo_width = 24 if self.pga_logo else 0
         spacing = 4
 
         # Build the leaderboard text (players only, no tournament name)
@@ -649,17 +650,23 @@ class PGATourLeaderboardPlugin(BasePlugin):
         # Each character is roughly 6 pixels wide with this font
         char_width = 6
         text_width = len(content_text) * char_width
-        total_width = text_width + self.display_width  # Add buffer for smooth scrolling
+        total_width = logo_width + spacing + text_width + self.display_width  # Add buffer for smooth scrolling
 
         # Calculate scroll area height (reserve space for tournament bar)
         scroll_height = self.display_height - 8
 
-        # Create the scrolling image (players only)
+        # Create the scrolling image (logo + players)
         img = Image.new('RGB', (total_width, scroll_height), (0, 0, 0))
         draw = ImageDraw.Draw(img)
 
-        # Start drawing player content
+        # Start drawing - logo comes first
         current_x = self.display_width  # Start offscreen right for smooth entry
+
+        # Draw PGA logo at the start (vertically centered in scroll area)
+        if self.pga_logo:
+            logo_y = (scroll_height - self.pga_logo.height) // 2
+            img.paste(self.pga_logo, (current_x, logo_y), self.pga_logo if self.pga_logo.mode == 'RGBA' else None)
+            current_x += logo_width + spacing
 
         # Draw the leaderboard content
         y_pos = (scroll_height // 2) - (self.font_size // 2)
@@ -691,7 +698,7 @@ class PGATourLeaderboardPlugin(BasePlugin):
 
     def _create_tournament_bar(self, tournament: Dict, is_previous: bool) -> Image.Image:
         """
-        Create a static bar with tournament name and PGA logo.
+        Create a static bar with centered tournament name (no logo).
 
         Args:
             tournament: Tournament data
@@ -704,33 +711,16 @@ class PGATourLeaderboardPlugin(BasePlugin):
         bar = Image.new('RGB', (self.display_width, 8), (0, 0, 0))
         draw = ImageDraw.Draw(bar)
 
-        current_x = 2
-
-        # Draw small PGA logo if available (scale down to fit 8px height)
-        if self.pga_logo:
-            # Scale logo to fit 8px height while maintaining aspect ratio
-            logo_height = 6
-            aspect_ratio = self.pga_logo.width / self.pga_logo.height
-            logo_width = int(logo_height * aspect_ratio)
-            small_logo = self.pga_logo.resize((logo_width, logo_height), Image.Resampling.LANCZOS)
-
-            # Paste logo vertically centered in the bar
-            logo_y = (8 - logo_height) // 2
-            bar.paste(small_logo, (current_x, logo_y), small_logo if small_logo.mode == 'RGBA' else None)
-            current_x += logo_width + 3
-
         # Draw tournament name
         tournament_prefix = "PREV: " if is_previous else ""
         tournament_text = f"{tournament_prefix}{tournament['name']}"
 
-        # Use smaller font size for the bar (or truncate if needed)
-        y_pos = 1  # Centered in 8px bar for 6px font
-
-        # Truncate tournament name if it's too long
-        max_width = self.display_width - current_x - 2
+        # Calculate text dimensions
         bbox = draw.textbbox((0, 0), tournament_text, font=self.font)
         text_width = bbox[2] - bbox[0]
 
+        # Truncate tournament name if it's too long to fit display
+        max_width = self.display_width - 4  # Leave 2px margin on each side
         if text_width > max_width:
             # Truncate text to fit
             while len(tournament_text) > 3 and text_width > max_width:
@@ -738,8 +728,12 @@ class PGATourLeaderboardPlugin(BasePlugin):
                 bbox = draw.textbbox((0, 0), tournament_text, font=self.font)
                 text_width = bbox[2] - bbox[0]
 
-        # Draw tournament name in highlight color
-        draw.text((current_x, y_pos), tournament_text, font=self.font, fill=self.highlight_color)
+        # Center the text horizontally
+        x_pos = (self.display_width - text_width) // 2
+        y_pos = 1  # Centered vertically in 8px bar for 6px font
+
+        # Draw tournament name in highlight color (centered)
+        draw.text((x_pos, y_pos), tournament_text, font=self.font, fill=self.highlight_color)
 
         return bar
 

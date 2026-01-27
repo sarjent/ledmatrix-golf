@@ -5,6 +5,7 @@ A custom plugin for the [LEDMatrix project](https://github.com/ryderdamen/LEDMat
 ## Features
 
 - 📊 Displays top 10 players (configurable) from current PGA Tour tournaments
+- 🎯 **v1.4.1**: Moved PGA logo to scroll with players, centered tournament name at bottom
 - 🎯 **v1.4.0**: Split-screen display - players scroll on top, tournament name persistent at bottom
 - ⛳ **v1.3.0**: Added holes completed display and asterisk (*) indicator for players currently on the course
 - 🎬 **v1.2.0**: Added horizontal scrolling display with PGA Tour logo
@@ -158,23 +159,24 @@ highlight_color:
 ## Display Format
 
 The display is split into two sections:
-- **Top section (24 pixels)**: Player standings scroll horizontally right-to-left
-- **Bottom section (8 pixels)**: Tournament name and PGA logo remain static
+- **Top section (24 pixels)**: PGA logo + player standings scroll horizontally right-to-left
+- **Bottom section (8 pixels)**: Tournament name remains static (centered)
 
 **Current Tournament Display:**
 ```
-Top (scrolling):    1. *J.Smith -5 (12) | 2. A.Jones -4 (F) | 3. *B.Lee -3 (15) | ... →
-Bottom (static):    [🏌️ PGA] The Genesis Invitational
+Top (scrolling):    [🏌️] 1. *J.Smith -5 (12) | 2. A.Jones -4 (F) | 3. *B.Lee -3 (15) | ... →
+Bottom (static):              The Genesis Invitational
 ```
 
 **Previous Tournament Fallback:**
 ```
-Top (scrolling):    1. J.Smith -12 (F) | 2. A.Jones -10 (F) | 3. B.Lee -8 (F) | ... →
-Bottom (static):    [🏌️ PGA] PREV: The American Express
+Top (scrolling):    [🏌️] 1. J.Smith -12 (F) | 2. A.Jones -10 (F) | 3. B.Lee -8 (F) | ... →
+Bottom (static):            PREV: The American Express
 ```
 
 **Display Elements:**
-- **Top section**: Scrolling player standings
+- **Top section**: Scrolling content
+  - **PGA Tour logo** leads the scroll (20px)
   - **Asterisk (*)** prefix indicates player is currently on the course
   - **Holes completed** shown in parentheses: (12) = through 12 holes, (F) = finished round
   - **Top 3 players** highlighted in gold
@@ -182,11 +184,10 @@ Bottom (static):    [🏌️ PGA] PREV: The American Express
   - **Smooth scrolling** animation at 120 FPS
   - **Separator** " | " between entries
 
-- **Bottom section**: Static tournament information
-  - **PGA Tour logo** (scaled to fit 8px bar)
-  - **Tournament name** in gold/highlight color
+- **Bottom section**: Static tournament bar
+  - **Tournament name** centered and in gold/highlight color
   - **"PREV:"** prefix for previous tournaments
-  - **Auto-truncated** if name is too long
+  - **Auto-truncated** if name is too long to fit display
 
 **Examples:**
 - `1. *S.Scheffler -8 (14)` - Scottie Scheffler in 1st place, 8 under par, currently playing hole 14
