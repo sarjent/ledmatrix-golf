@@ -56,6 +56,10 @@ class PGATourLeaderboardPlugin(BasePlugin):
             display_height=self.display_height,
             logger=self.logger
         )
+        # Configure scrolling for smooth, readable display
+        self.scroll_helper.set_scroll_speed(30.0)  # 30 pixels per second for readability
+        self.scroll_helper.set_target_fps(120)  # 120 FPS for smooth scrolling
+
         self.logo_helper = LogoHelper(
             display_width=self.display_width,
             display_height=self.display_height,
@@ -471,14 +475,18 @@ class PGATourLeaderboardPlugin(BasePlugin):
             # Create or update the scrolling image
             if self.scroll_image is None or force_clear:
                 self.scroll_image = self._create_scroll_image(tournament, leaderboard, is_previous)
-                self.scroll_helper.set_image(self.scroll_image)
+                self.scroll_helper.set_scrolling_image(self.scroll_image)
 
-            # Get next frame from scroll helper
-            frame = self.scroll_helper.get_next_frame()
+            # Update scroll position
+            self.scroll_helper.update_scroll_position()
+
+            # Get visible portion from scroll helper
+            frame = self.scroll_helper.get_visible_portion()
 
             # Update display
-            self.display_manager.image = frame
-            self.display_manager.update_display()
+            if frame:
+                self.display_manager.image = frame
+                self.display_manager.update_display()
 
             tournament_type = "previous" if is_previous else "current"
             self.logger.debug(f"Scrolling {tournament_type} PGA Tour leaderboard: {tournament['name']}")
@@ -700,4 +708,9 @@ class PGATourLeaderboardPlugin(BasePlugin):
         self.previous_tournament = None
         self.scroll_image = None
         self.pga_logo = None
+
+        # Clear scroll helper cache
+        if self.scroll_helper:
+            self.scroll_helper.clear_cache()
+
         self.logger.info("PGA Tour Leaderboard plugin cleaned up")

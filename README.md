@@ -6,6 +6,7 @@ A custom plugin for the [LEDMatrix project](https://github.com/ryderdamen/LEDMat
 
 - 📊 Displays top 10 players (configurable) from current PGA Tour tournaments
 - 🎬 **v1.2.0**: Added horizontal scrolling display with PGA Tour logo
+- 🐛 **v1.2.1**: Fixed scrolling implementation to work correctly with ScrollHelper
 - 🔙 **v1.1.0**: Falls back to showing top 5 from the most recent completed tournament when no current tournament is available
 - 🐛 **v1.1.1**: Fixed API endpoint to use scoreboard instead of leaderboard
 - 🗓️ Automatically filters tournaments within a configurable date range (default: 7 days)
