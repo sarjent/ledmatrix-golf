@@ -216,6 +216,9 @@ class PGATourLeaderboardPlugin(BasePlugin):
             date_threshold = today + timedelta(days=self.tournament_date_range)
 
             valid_tournament = None
+            most_recent_completed = None
+            most_recent_completed_date = None
+
             for event in events:
                 # Parse tournament date
                 event_date_str = event.get('date')
@@ -227,13 +230,25 @@ class PGATourLeaderboardPlugin(BasePlugin):
                     # Remove timezone info for comparison
                     event_date = event_date.replace(tzinfo=None)
 
-                    # Check if tournament is within date range
+                    # Check if tournament is within date range (current/upcoming)
                     if today <= event_date <= date_threshold:
                         valid_tournament = event
                         break
+
+                    # Also track most recent completed tournament as fallback
+                    event_status = event.get('status', {}).get('type', {}).get('state', '')
+                    if event_status == 'post' and event_date < today:
+                        if most_recent_completed is None or event_date > most_recent_completed_date:
+                            most_recent_completed = event
+                            most_recent_completed_date = event_date
+
                 except Exception as e:
                     self.logger.debug(f"Error parsing date {event_date_str}: {e}")
                     continue
+
+            # If we found a completed tournament in current response, store it as fallback
+            if most_recent_completed:
+                self._process_previous_tournament(most_recent_completed)
 
             if not valid_tournament:
                 self.logger.info(f"No tournaments found within {self.tournament_date_range} days")
@@ -342,12 +357,19 @@ class PGATourLeaderboardPlugin(BasePlugin):
         """
         Fetch the most recent completed tournament as fallback.
         Looks back up to 30 days for a completed tournament.
+        Only called if current scoreboard didn't contain a completed tournament.
         """
         try:
+            # If we already have a previous tournament from current response, skip
+            if self.previous_tournament:
+                self.logger.debug("Already have previous tournament from current response")
+                return
+
             today = datetime.now()
 
-            # Try fetching data from previous weeks
-            for days_back in range(7, 31, 7):  # Check 7, 14, 21, 28 days back
+            # Search backwards day by day to find most recent completed tournament
+            # Check every 3 days to balance thoroughness with API calls
+            for days_back in range(1, 31, 3):  # Check 1, 4, 7, 10, 13...28 days back
                 date_to_check = today - timedelta(days=days_back)
                 date_str = date_to_check.strftime('%Y%m%d')
 
@@ -372,6 +394,7 @@ class PGATourLeaderboardPlugin(BasePlugin):
                     if event_status == 'post':  # Tournament is completed
                         self._process_previous_tournament(event)
                         if self.previous_tournament:
+                            self.logger.info(f"Found previous tournament {days_back} days back")
                             return
 
             self.logger.info("No previous tournaments found in the last 30 days")
