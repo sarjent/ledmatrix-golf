@@ -722,7 +722,7 @@ class PGATourLeaderboardPlugin(BasePlugin):
 
             # Add separator
             if i < len(content_parts) - 1:
-                draw.text((current_x, y_pos), separator, font=self.font, fill=self.text_color)
+                draw.text((current_x, y_pos), separator, font=self.font, fill=(0, 255, 0))
                 sep_bbox = draw.textbbox((current_x, y_pos), separator, font=self.font)
                 current_x += sep_bbox[2] - sep_bbox[0]
 
