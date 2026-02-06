@@ -154,18 +154,26 @@ class PGATourLeaderboardPlugin(BasePlugin):
         """
         try:
             # Check if we need to update (respects update_interval)
+            # Use a shorter interval when we have no current tournament,
+            # so we detect new tournaments faster during transition periods.
+            effective_interval = self.update_interval_seconds
+            if not self.current_tournament and self.last_update:
+                # Refresh every 2 minutes when waiting for a new tournament
+                effective_interval = min(self.update_interval_seconds, 120)
+
             if self.last_update:
                 time_since_update = (datetime.now() - self.last_update).total_seconds()
-                if time_since_update < self.update_interval_seconds:
+                if time_since_update < effective_interval:
                     self.logger.debug(f"Skipping update, last update was {time_since_update:.0f}s ago")
                     return
 
             # Fetch current PGA Tour events
-            cache_key = f"{self.plugin_id}_pga_scoreboard"
+            # No cache_key: the update_interval throttle above handles rate limiting,
+            # and skipping the cache ensures we always get fresh data from ESPN.
+            # In-memory state (current_tournament/previous_tournament) provides
+            # display continuity if the API call fails.
             data = self.api_helper.get(
-                url="https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard",
-                cache_key=cache_key,
-                cache_ttl=self.update_interval_seconds
+                url="https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard"
             )
 
             if not data:
@@ -181,6 +189,9 @@ class PGATourLeaderboardPlugin(BasePlugin):
                 self._fetch_previous_tournament()
 
             self.last_update = datetime.now()
+
+            # Invalidate cached scroll image so display() will regenerate it with new data
+            self.scroll_image = None
 
             if self.current_tournament:
                 self.logger.info(
@@ -233,13 +244,26 @@ class PGATourLeaderboardPlugin(BasePlugin):
                     # Remove timezone info for comparison
                     event_date = event_date.replace(tzinfo=None)
 
-                    # Check if tournament is within date range (current/upcoming)
-                    if today <= event_date <= date_threshold:
+                    # Get tournament status
+                    event_status = event.get('status', {}).get('type', {}).get('state', '')
+
+                    # Tournament is valid if:
+                    # 1. Status is "in" (currently in progress) - always show active tournaments
+                    # 2. Status is "pre" (scheduled) and within date range
+                    # The ESPN API date is the tournament START date, so we check
+                    # if the start date is within the range (not requiring today <= event_date)
+                    if event_status == 'in':
+                        # Tournament is actively in progress - always show it
                         valid_tournament = event
+                        self.logger.debug(f"Found in-progress tournament: {event.get('name')}")
+                        break
+                    elif event_status == 'pre' and event_date <= date_threshold:
+                        # Upcoming tournament within date range
+                        valid_tournament = event
+                        self.logger.debug(f"Found upcoming tournament: {event.get('name')}")
                         break
 
-                    # Also track most recent completed tournament as fallback
-                    event_status = event.get('status', {}).get('type', {}).get('state', '')
+                    # Track most recent completed tournament as fallback
                     if event_status == 'post' and event_date < today:
                         if most_recent_completed is None or event_date > most_recent_completed_date:
                             most_recent_completed = event
@@ -259,9 +283,15 @@ class PGATourLeaderboardPlugin(BasePlugin):
                 self.leaderboard_data = []
                 return
 
+            # Detect tournament change
+            new_name = valid_tournament.get('name', 'PGA Tour')
+            old_name = self.current_tournament.get('name') if self.current_tournament else None
+            if old_name and old_name != new_name:
+                self.logger.info(f"Tournament changed: '{old_name}' -> '{new_name}'")
+
             # Extract tournament info
             self.current_tournament = {
-                'name': valid_tournament.get('name', 'PGA Tour'),
+                'name': new_name,
                 'date': valid_tournament.get('date', ''),
                 'status': valid_tournament.get('status', 'scheduled')
             }
@@ -277,9 +307,10 @@ class PGATourLeaderboardPlugin(BasePlugin):
             competitors = competition.get('competitors', [])
 
             # Sort by position and extract top players
+            # Use 'order' field (more reliable), fall back to 'sortOrder' if not available
             sorted_competitors = sorted(
                 competitors,
-                key=lambda x: self._parse_position(x.get('sortOrder', 999))
+                key=lambda x: self._parse_position(x.get('order') or x.get('sortOrder', 999))
             )
 
             self.leaderboard_data = []
@@ -288,8 +319,8 @@ class PGATourLeaderboardPlugin(BasePlugin):
                     athlete = competitor.get('athlete', {})
                     stats = competitor.get('statistics', [])
 
-                    # Extract score/position
-                    position = competitor.get('sortOrder', '')
+                    # Extract score/position (prefer 'order' field, fall back to 'sortOrder')
+                    position = competitor.get('order') or competitor.get('sortOrder', '')
                     score_display = self._get_score_display(competitor, stats)
 
                     # Extract holes completed ("thru")
@@ -346,17 +377,17 @@ class PGATourLeaderboardPlugin(BasePlugin):
             Score display string (e.g., "-5", "E", "+2")
         """
         try:
-            # Try to get score from statistics
+            # Primary: Get score directly from competitor object (most reliable)
+            score = competitor.get('score')
+            if score is not None:
+                return str(score)
+
+            # Fallback: Try to get score from statistics
             for stat in stats:
                 if stat.get('name') == 'score':
                     score_value = stat.get('displayValue', stat.get('value'))
                     if score_value:
                         return str(score_value)
-
-            # Fallback to competitor score
-            score = competitor.get('score')
-            if score:
-                return str(score)
 
             return "E"  # Default to even par
 
@@ -440,12 +471,9 @@ class PGATourLeaderboardPlugin(BasePlugin):
                 date_to_check = today - timedelta(days=days_back)
                 date_str = date_to_check.strftime('%Y%m%d')
 
-                cache_key = f"{self.plugin_id}_pga_previous_{date_str}"
                 data = self.api_helper.get(
                     url=f"https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard",
-                    params={'dates': date_str},
-                    cache_key=cache_key,
-                    cache_ttl=86400  # Cache for 24 hours
+                    params={'dates': date_str}
                 )
 
                 if not data:
@@ -495,9 +523,10 @@ class PGATourLeaderboardPlugin(BasePlugin):
             competitors = competition.get('competitors', [])
 
             # Sort by position and extract top players (limited to fallback_players)
+            # Use 'order' field (more reliable), fall back to 'sortOrder' if not available
             sorted_competitors = sorted(
                 competitors,
-                key=lambda x: self._parse_position(x.get('sortOrder', 999))
+                key=lambda x: self._parse_position(x.get('order') or x.get('sortOrder', 999))
             )
 
             self.previous_leaderboard_data = []
@@ -506,8 +535,8 @@ class PGATourLeaderboardPlugin(BasePlugin):
                     athlete = competitor.get('athlete', {})
                     stats = competitor.get('statistics', [])
 
-                    # Extract score/position
-                    position = competitor.get('sortOrder', '')
+                    # Extract score/position (prefer 'order' field, fall back to 'sortOrder')
+                    position = competitor.get('order') or competitor.get('sortOrder', '')
                     score_display = self._get_score_display(competitor, stats)
 
                     # Extract holes completed ("thru") - will be "F" for completed tournaments
