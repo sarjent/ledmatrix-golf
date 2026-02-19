@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 from PIL import Image, ImageDraw, ImageFont
 
-from src.plugin_system.base_plugin import BasePlugin
+from src.plugin_system.base_plugin import BasePlugin, VegasDisplayMode
 from src.common import APIHelper, TextHelper, ScrollHelper, LogoHelper
 
 logger = logging.getLogger(__name__)
@@ -844,6 +844,77 @@ class PGATourLeaderboardPlugin(BasePlugin):
         if len(text) <= max_length:
             return text
         return text[:max_length - 1] + "."
+
+    # -------------------------------------------------------------------------
+    # Vegas scroll mode support
+    # -------------------------------------------------------------------------
+
+    def get_vegas_content_type(self) -> str:
+        """Report as multi-item content so Vegas uses SCROLL mode by default."""
+        return 'multi'
+
+    def get_vegas_content(self) -> Optional[List[Image.Image]]:
+        """
+        Return one image per player for Vegas scroll mode.
+
+        Vegas composes these individually into the continuous scroll stream.
+        Uses current leaderboard data, falling back to previous tournament data.
+        Returns None if no data is loaded yet.
+        """
+        leaderboard = self.leaderboard_data or self.previous_leaderboard_data
+        if not leaderboard:
+            return None
+
+        images = []
+        for i, player in enumerate(leaderboard):
+            img = self._create_player_item(player, i)
+            if img:
+                images.append(img)
+
+        return images if images else None
+
+    def _create_player_item(self, player: Dict[str, Any], position_index: int) -> Image.Image:
+        """
+        Create a single player item image for Vegas scroll mode.
+
+        Each image is display_height tall and contains the player's
+        position, name, score, and holes-thru information.
+
+        Args:
+            player: Player data dictionary
+            position_index: 0-based index (used for highlight color on top 3)
+
+        Returns:
+            PIL Image for this player
+        """
+        position = player['position']
+        name = player['short_name']
+        score = player['score']
+        thru = player.get('thru', 'F')
+        on_course = player.get('on_course', False)
+
+        name_prefix = "*" if on_course else ""
+        player_str = f"{position}. {name_prefix}{name} {score}"
+        if thru and thru.upper() != 'F':
+            player_str += f" ({thru})"
+
+        # Measure text width
+        temp_img = Image.new('RGB', (1, 1))
+        temp_draw = ImageDraw.Draw(temp_img)
+        bbox = temp_draw.textbbox((0, 0), player_str, font=self.font)
+        text_width = bbox[2] - bbox[0]
+
+        img = Image.new('RGB', (text_width + 4, self.display_height), (0, 0, 0))
+        draw = ImageDraw.Draw(img)
+
+        # Center text vertically
+        y = (self.display_height - self.font_size) // 2
+
+        # Top 3 players get highlight color
+        color = self.highlight_color if position_index < 3 else self.text_color
+        draw.text((2, y), player_str, font=self.font, fill=color)
+
+        return img
 
     def get_display_duration(self) -> float:
         """Get display duration from config."""
