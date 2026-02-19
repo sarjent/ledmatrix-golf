@@ -855,23 +855,64 @@ class PGATourLeaderboardPlugin(BasePlugin):
 
     def get_vegas_content(self) -> Optional[List[Image.Image]]:
         """
-        Return one image per player for Vegas scroll mode.
+        Return tournament name followed by one image per player for Vegas scroll mode.
 
         Vegas composes these individually into the continuous scroll stream.
         Uses current leaderboard data, falling back to previous tournament data.
         Returns None if no data is loaded yet.
         """
-        leaderboard = self.leaderboard_data or self.previous_leaderboard_data
-        if not leaderboard:
+        if self.leaderboard_data:
+            tournament = self.current_tournament
+            leaderboard = self.leaderboard_data
+            is_previous = False
+        elif self.previous_leaderboard_data:
+            tournament = self.previous_tournament
+            leaderboard = self.previous_leaderboard_data
+            is_previous = True
+        else:
             return None
 
         images = []
+
+        # Prepend tournament name item
+        if tournament:
+            tournament_img = self._create_tournament_item(tournament, is_previous)
+            if tournament_img:
+                images.append(tournament_img)
+
         for i, player in enumerate(leaderboard):
             img = self._create_player_item(player, i)
             if img:
                 images.append(img)
 
         return images if images else None
+
+    def _create_tournament_item(self, tournament: Dict[str, Any], is_previous: bool) -> Image.Image:
+        """
+        Create a tournament name image for Vegas scroll mode.
+
+        Args:
+            tournament: Tournament data dictionary
+            is_previous: Whether this is a previous (completed) tournament
+
+        Returns:
+            PIL Image with the tournament name
+        """
+        prefix = "PREV: " if is_previous else ""
+        text = f"{prefix}{tournament.get('name', 'PGA Tour')}"
+
+        temp_img = Image.new('RGB', (1, 1))
+        temp_draw = ImageDraw.Draw(temp_img)
+        bbox = temp_draw.textbbox((0, 0), text, font=self.font)
+        text_width = bbox[2] - bbox[0]
+
+        img = Image.new('RGB', (text_width + 4, self.display_height), (0, 0, 0))
+        draw = ImageDraw.Draw(img)
+
+        y = (self.display_height - self.font_size) // 2
+        draw.text((2, y), text, font=self.font, fill=self.highlight_color)
+
+        return img
 
     def _create_player_item(self, player: Dict[str, Any], position_index: int) -> Image.Image:
         """
