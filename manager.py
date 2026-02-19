@@ -156,23 +156,42 @@ class PGATourLeaderboardPlugin(BasePlugin):
             self.logger.error(f"Failed to install PGA Tour logo: {e}")
 
     def _load_logo(self) -> None:
-        """Load the PGA Tour logo."""
+        """Load the PGA Tour logo.
+
+        Loads the image directly (bypassing logo_helper) so we can auto-crop
+        transparent borders before resizing. This ensures the visible logo
+        content fills as much of the scroll area height as possible, regardless
+        of how much transparent padding surrounds it in the source file.
+        """
+        logo_path = Path("assets/sports/pga_logos/pga_logo.png")
+        if not logo_path.exists():
+            self.logger.warning(f"PGA Tour logo not found at {logo_path}")
+            self.pga_logo = None
+            return
+
         try:
-            logo_path = Path("assets/sports/pga_logos/pga_logo.png")
-            # Use larger logo size to match news ticker style
-            # Max height is scroll area (display_height - 8) minus 2px padding
+            raw = Image.open(logo_path)
+            if raw.mode != 'RGBA':
+                raw = raw.convert('RGBA')
+
+            # Strip transparent borders so the visible content fills the frame
+            bbox = raw.getbbox()
+            if bbox:
+                raw = raw.crop(bbox)
+
+            # Scale to fit the scroll area height (display_height minus the
+            # 8-pixel tournament bar, minus 2px padding)
             scroll_height = self.display_height - 8
-            self.pga_logo = self.logo_helper.load_logo(
-                "PGA",
-                logo_path,
-                max_width=36,  # Increased from 20 for better visibility
-                max_height=scroll_height - 2  # Full scroll height minus padding
+            max_h = scroll_height - 2
+            # Allow up to half the display width so the logo doesn't crowd text
+            max_w = self.display_width // 2
+            raw.thumbnail((max_w, max_h), Image.Resampling.LANCZOS)
+
+            self.pga_logo = raw
+            self.logger.debug(
+                f"Loaded PGA Tour logo from {logo_path} "
+                f"(size: {self.pga_logo.width}x{self.pga_logo.height})"
             )
-            if self.pga_logo:
-                self.logger.debug(f"Loaded PGA Tour logo from {logo_path} (size: {self.pga_logo.width}x{self.pga_logo.height})")
-            else:
-                self.logger.warning(f"PGA Tour logo not found at {logo_path}")
-                self.pga_logo = None
         except Exception as e:
             self.logger.error(f"Error loading PGA Tour logo: {e}")
             self.pga_logo = None
