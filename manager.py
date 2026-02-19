@@ -474,26 +474,27 @@ class PGATourLeaderboardPlugin(BasePlugin):
         Checks multiple locations in the ESPN response in order:
         1. statistics array (name == 'thru')
         2. competitor-level 'thru' field
-        3. competitor.status.thru
-        Returns "F" (finished) if nothing is found.
+        3. competitor.status.thru / holesCompleted
+        4. Count per-hole entries in competitor.linescores[round].linescores
+        Returns "F" (finished / not started) if nothing useful is found.
 
         Args:
             stats: Statistics list from competitor
             competitor: Full competitor dict for fallback lookups
 
         Returns:
-            Thru display string (e.g., "F", "12", "14*" for finished, through 12, etc.)
+            Thru display string (e.g., "F", "9", "14" for finished/not started, through 9, etc.)
         """
         try:
-            # 1. Statistics array (most common ESPN format)
+            # 1. Statistics array (some ESPN formats use this)
             for stat in stats:
                 if stat.get('name') == 'thru':
                     thru_value = stat.get('displayValue', stat.get('value'))
                     if thru_value is not None:
                         return str(thru_value)
 
-            # 2. Direct competitor field
             if competitor:
+                # 2. Direct competitor field
                 thru_value = competitor.get('thru')
                 if thru_value is not None:
                     return str(thru_value)
@@ -505,7 +506,19 @@ class PGATourLeaderboardPlugin(BasePlugin):
                     if thru_value is not None:
                         return str(thru_value)
 
-            return "F"  # Default to finished
+                # 4. Count per-hole entries in linescores (live round format)
+                # ESPN returns competitor.linescores = [{period, linescores:[hole1,hole2,...]}, ...]
+                # The most recent round with hole data tells us how many holes are done.
+                linescores = competitor.get('linescores', [])
+                if linescores and isinstance(linescores, list):
+                    for round_data in reversed(linescores):
+                        if isinstance(round_data, dict):
+                            hole_scores = round_data.get('linescores', [])
+                            if isinstance(hole_scores, list) and len(hole_scores) > 0:
+                                holes_played = len(hole_scores)
+                                return 'F' if holes_played >= 18 else str(holes_played)
+
+            return "F"  # Default to finished / not started
 
         except Exception as e:
             self.logger.debug(f"Error getting thru display: {e}")
@@ -970,6 +983,13 @@ class PGATourLeaderboardPlugin(BasePlugin):
             return None
 
         images = []
+
+        # Prepend PGA Tour logo
+        if self.pga_logo:
+            logo_canvas = Image.new('RGB', (self.pga_logo.width, self.display_height), (0, 0, 0))
+            logo_y = (self.display_height - self.pga_logo.height) // 2
+            logo_canvas.paste(self.pga_logo, (0, logo_y), self.pga_logo)
+            images.append(logo_canvas)
 
         # Prepend tournament name item
         if tournament:
