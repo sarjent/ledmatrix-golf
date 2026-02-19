@@ -396,10 +396,10 @@ class PGATourLeaderboardPlugin(BasePlugin):
                     score_display = self._get_score_display(competitor, stats)
 
                     # Extract holes completed ("thru")
-                    thru_display = self._get_thru_display(stats)
+                    thru_display = self._get_thru_display(stats, competitor)
 
                     # Check if player is currently on the course
-                    is_on_course = self._is_player_on_course(stats)
+                    is_on_course = self._is_player_on_course(stats, competitor)
 
                     player_data = {
                         'position': position,
@@ -467,55 +467,73 @@ class PGATourLeaderboardPlugin(BasePlugin):
             self.logger.debug(f"Error getting score display: {e}")
             return "E"
 
-    def _get_thru_display(self, stats: List[Dict]) -> str:
+    def _get_thru_display(self, stats: List[Dict], competitor: Dict = None) -> str:
         """
         Get the display string for holes completed.
 
+        Checks multiple locations in the ESPN response in order:
+        1. statistics array (name == 'thru')
+        2. competitor-level 'thru' field
+        3. competitor.status.thru
+        Returns "F" (finished) if nothing is found.
+
         Args:
-            stats: Statistics list
+            stats: Statistics list from competitor
+            competitor: Full competitor dict for fallback lookups
 
         Returns:
-            Thru display string (e.g., "F", "12", "18*" for finished, through 12, etc.)
+            Thru display string (e.g., "F", "12", "14*" for finished, through 12, etc.)
         """
         try:
+            # 1. Statistics array (most common ESPN format)
             for stat in stats:
                 if stat.get('name') == 'thru':
                     thru_value = stat.get('displayValue', stat.get('value'))
-                    if thru_value:
+                    if thru_value is not None:
                         return str(thru_value)
+
+            # 2. Direct competitor field
+            if competitor:
+                thru_value = competitor.get('thru')
+                if thru_value is not None:
+                    return str(thru_value)
+
+                # 3. Nested under competitor.status
+                status = competitor.get('status', {})
+                if isinstance(status, dict):
+                    thru_value = status.get('thru') or status.get('holesCompleted')
+                    if thru_value is not None:
+                        return str(thru_value)
+
             return "F"  # Default to finished
 
         except Exception as e:
             self.logger.debug(f"Error getting thru display: {e}")
             return "F"
 
-    def _is_player_on_course(self, stats: List[Dict]) -> bool:
+    def _is_player_on_course(self, stats: List[Dict], competitor: Dict = None) -> bool:
         """
         Check if player is currently on the course.
         A player is considered on course if they have started but not finished their round.
 
         Args:
             stats: Statistics list
+            competitor: Full competitor dict for fallback lookups
 
         Returns:
             True if player is currently on the course, False otherwise
         """
         try:
-            thru_value = None
-            for stat in stats:
-                if stat.get('name') == 'thru':
-                    thru_value = stat.get('displayValue', stat.get('value'))
-                    break
+            thru_value = self._get_thru_display(stats, competitor)
 
             # Player is on course if thru is not "F" (finished) and not empty
             if thru_value and str(thru_value).upper() != 'F':
                 # Check if it's a valid hole number (indicates they're playing)
                 try:
-                    hole_num = int(str(thru_value))
+                    hole_num = int(str(thru_value).replace('*', ''))
                     return 1 <= hole_num <= 18
                 except ValueError:
-                    # If thru contains "*" or other indicators, still check
-                    return '*' in str(thru_value) or str(thru_value).isdigit()
+                    return '*' in str(thru_value)
 
             return False
 
@@ -838,8 +856,13 @@ class PGATourLeaderboardPlugin(BasePlugin):
         x_pos = (self.display_width - text_width) // 2
         y_pos = 1  # Centered vertically in 8px bar for 6px font
 
-        # Draw tournament name in highlight color (centered)
-        draw.text((x_pos, y_pos), tournament_text, font=self.font, fill=self.highlight_color)
+        # Color: green when a round is live, red for all other statuses
+        if 'live' in round_status.lower():
+            bar_color = (0, 200, 0)
+        else:
+            bar_color = (200, 50, 50)
+
+        draw.text((x_pos, y_pos), tournament_text, font=self.font, fill=bar_color)
 
         return bar
 
@@ -987,8 +1010,14 @@ class PGATourLeaderboardPlugin(BasePlugin):
         img = Image.new('RGB', (text_width + 4, self.display_height), (0, 0, 0))
         draw = ImageDraw.Draw(img)
 
+        # Color: green when a round is live, red for all other statuses
+        if 'live' in round_status.lower():
+            item_color = (0, 200, 0)
+        else:
+            item_color = (200, 50, 50)
+
         y = (self.display_height - self.font_size) // 2
-        draw.text((2, y), text, font=self.font, fill=self.highlight_color)
+        draw.text((2, y), text, font=self.font, fill=item_color)
 
         return img
 
