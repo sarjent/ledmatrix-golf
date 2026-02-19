@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 from PIL import Image, ImageDraw, ImageFont
 
-from src.plugin_system.base_plugin import BasePlugin, VegasDisplayMode
+from src.plugin_system.base_plugin import BasePlugin
 from src.common import APIHelper, TextHelper, ScrollHelper, LogoHelper
 
 logger = logging.getLogger(__name__)
