@@ -707,6 +707,7 @@ class PGATourLeaderboardPlugin(BasePlugin):
         spacing = 6  # Increased spacing for larger logo
 
         # Build the leaderboard text (players only, no tournament name)
+        # Each entry is (base_str, thru_str) so thru can be drawn in a different color
         content_parts = []
 
         for i, player in enumerate(leaderboard):
@@ -719,18 +720,14 @@ class PGATourLeaderboardPlugin(BasePlugin):
             # Add asterisk prefix if player is on course
             name_prefix = "*" if on_course else ""
 
-            # Build player string with thru info
-            player_str = f"{position}. {name_prefix}{name} {score}"
+            base_str = f"{position}. {name_prefix}{name} {score}"
+            thru_str = f" ({thru})" if thru and thru.upper() != 'F' else ""
 
-            # Add thru information if not finished
-            if thru and thru.upper() != 'F':
-                player_str += f" ({thru})"
+            content_parts.append((base_str, thru_str))
 
-            content_parts.append(player_str)
-
-        # Join with separator
+        # Join with separator (for width estimation)
         separator = " | "
-        content_text = separator.join(content_parts)
+        content_text = separator.join(b + t for b, t in content_parts)
 
         # Estimate total width (rough approximation)
         # Each character is roughly 6 pixels wide with this font
@@ -757,22 +754,22 @@ class PGATourLeaderboardPlugin(BasePlugin):
         # Draw the leaderboard content
         y_pos = (scroll_height // 2) - (self.font_size // 2)
 
+        thru_color = (0, 128, 255)  # Blue for holes-thru info
+
         # Draw each part with appropriate color
-        for i, part in enumerate(content_parts):
+        for i, (base_str, thru_str) in enumerate(content_parts):
             # Determine color (highlight first 3 players)
-            if i < 3:
-                # Top 3 players
-                color = self.highlight_color
-            else:
-                # Other players
-                color = self.text_color
+            color = self.highlight_color if i < 3 else self.text_color
 
-            draw.text((current_x, y_pos), part, font=self.font, fill=color)
+            draw.text((current_x, y_pos), base_str, font=self.font, fill=color)
+            bbox = draw.textbbox((current_x, y_pos), base_str, font=self.font)
+            current_x += bbox[2] - bbox[0]
 
-            # Calculate width of this part
-            bbox = draw.textbbox((current_x, y_pos), part, font=self.font)
-            part_width = bbox[2] - bbox[0]
-            current_x += part_width
+            # Draw thru info in blue
+            if thru_str:
+                draw.text((current_x, y_pos), thru_str, font=self.font, fill=thru_color)
+                bbox = draw.textbbox((current_x, y_pos), thru_str, font=self.font)
+                current_x += bbox[2] - bbox[0]
 
             # Add separator
             if i < len(content_parts) - 1:
@@ -997,15 +994,20 @@ class PGATourLeaderboardPlugin(BasePlugin):
         on_course = player.get('on_course', False)
 
         name_prefix = "*" if on_course else ""
-        player_str = f"{position}. {name_prefix}{name} {score}"
-        if thru and thru.upper() != 'F':
-            player_str += f" ({thru})"
+        base_str = f"{position}. {name_prefix}{name} {score}"
+        thru_str = f" ({thru})" if thru and thru.upper() != 'F' else ""
+        thru_color = (0, 128, 255)  # Blue for holes-thru info
 
-        # Measure text width
+        # Measure combined text width
         temp_img = Image.new('RGB', (1, 1))
         temp_draw = ImageDraw.Draw(temp_img)
-        bbox = temp_draw.textbbox((0, 0), player_str, font=self.font)
-        text_width = bbox[2] - bbox[0]
+        base_bbox = temp_draw.textbbox((0, 0), base_str, font=self.font)
+        base_width = base_bbox[2] - base_bbox[0]
+        thru_width = 0
+        if thru_str:
+            thru_bbox = temp_draw.textbbox((0, 0), thru_str, font=self.font)
+            thru_width = thru_bbox[2] - thru_bbox[0]
+        text_width = base_width + thru_width
 
         img = Image.new('RGB', (text_width + 4, self.display_height), (0, 0, 0))
         draw = ImageDraw.Draw(img)
@@ -1015,7 +1017,11 @@ class PGATourLeaderboardPlugin(BasePlugin):
 
         # Top 3 players get highlight color
         color = self.highlight_color if position_index < 3 else self.text_color
-        draw.text((2, y), player_str, font=self.font, fill=color)
+        draw.text((2, y), base_str, font=self.font, fill=color)
+
+        # Draw thru info in blue
+        if thru_str:
+            draw.text((2 + base_width, y), thru_str, font=self.font, fill=thru_color)
 
         return img
 
