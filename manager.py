@@ -289,13 +289,6 @@ class PGATourLeaderboardPlugin(BasePlugin):
             if old_name and old_name != new_name:
                 self.logger.info(f"Tournament changed: '{old_name}' -> '{new_name}'")
 
-            # Extract tournament info
-            self.current_tournament = {
-                'name': new_name,
-                'date': valid_tournament.get('date', ''),
-                'status': valid_tournament.get('status', 'scheduled')
-            }
-
             # Extract leaderboard from competition
             competitions = valid_tournament.get('competitions', [])
             if not competitions:
@@ -304,6 +297,36 @@ class PGATourLeaderboardPlugin(BasePlugin):
                 return
 
             competition = competitions[0]
+
+            # Extract round status from competition
+            comp_status = competition.get('status', {})
+            round_num = comp_status.get('period', 0)
+            status_type = comp_status.get('type', {})
+            status_desc = status_type.get('description', '')
+            status_state = status_type.get('state', '')
+            desc_lower = status_desc.lower()
+
+            if 'final' in desc_lower:
+                round_status = 'Final'
+            elif round_num:
+                if 'suspended' in desc_lower:
+                    round_status = f'R{round_num} Susp'
+                elif status_state == 'in' or 'progress' in desc_lower:
+                    round_status = f'R{round_num} Live'
+                elif 'complete' in desc_lower:
+                    round_status = f'R{round_num} Done'
+                else:
+                    round_status = f'R{round_num}'
+            else:
+                round_status = status_desc
+
+            # Extract tournament info
+            self.current_tournament = {
+                'name': new_name,
+                'date': valid_tournament.get('date', ''),
+                'status': valid_tournament.get('status', 'scheduled'),
+                'round_status': round_status,
+            }
             competitors = competition.get('competitors', [])
 
             # Sort by position and extract top players
@@ -509,7 +532,8 @@ class PGATourLeaderboardPlugin(BasePlugin):
             self.previous_tournament = {
                 'name': event.get('name', 'PGA Tour'),
                 'date': event.get('date', ''),
-                'status': 'completed'
+                'status': 'completed',
+                'round_status': 'Final',
             }
 
             # Extract leaderboard from competition
@@ -743,9 +767,13 @@ class PGATourLeaderboardPlugin(BasePlugin):
         bar = Image.new('RGB', (self.display_width, 8), (0, 0, 0))
         draw = ImageDraw.Draw(bar)
 
-        # Draw tournament name
+        # Draw tournament name with round status
         tournament_prefix = "PREV: " if is_previous else ""
-        tournament_text = f"{tournament_prefix}{tournament['name']}"
+        round_status = tournament.get('round_status', '')
+        if round_status:
+            tournament_text = f"{tournament_prefix}{tournament['name']} | {round_status}"
+        else:
+            tournament_text = f"{tournament_prefix}{tournament['name']}"
 
         # Calculate text dimensions
         bbox = draw.textbbox((0, 0), tournament_text, font=self.font)
@@ -899,7 +927,11 @@ class PGATourLeaderboardPlugin(BasePlugin):
             PIL Image with the tournament name
         """
         prefix = "PREV: " if is_previous else ""
-        text = f"{prefix}{tournament.get('name', 'PGA Tour')}"
+        round_status = tournament.get('round_status', '')
+        if round_status:
+            text = f"{prefix}{tournament.get('name', 'PGA Tour')} | {round_status}"
+        else:
+            text = f"{prefix}{tournament.get('name', 'PGA Tour')}"
 
         temp_img = Image.new('RGB', (1, 1))
         temp_draw = ImageDraw.Draw(temp_img)
