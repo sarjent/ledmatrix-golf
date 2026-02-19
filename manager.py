@@ -72,6 +72,9 @@ class PGATourLeaderboardPlugin(BasePlugin):
         # Load fonts
         self._load_fonts()
 
+        # Ensure PGA Tour logo is installed in the core assets directory
+        self._ensure_logo_installed()
+
         # Load PGA Tour logo
         self._load_logo()
 
@@ -124,6 +127,33 @@ class PGATourLeaderboardPlugin(BasePlugin):
         except Exception as e:
             self.logger.error(f"Error loading font: {e}")
             self.font = ImageFont.load_default()
+
+    def _ensure_logo_installed(self) -> None:
+        """
+        Copy the bundled pga-logo.png to the core assets directory if it is not
+        already present.  This runs on every startup so the logo is available
+        after a fresh plugin install or update.
+        """
+        target = Path("assets/sports/pga_logos/pga_logo.png")
+        if target.exists():
+            return  # Already installed, nothing to do
+
+        # The logo ships alongside this manager.py file
+        source = Path(__file__).parent / "pga-logo.png"
+        if not source.exists():
+            self.logger.warning(
+                f"Bundled PGA logo not found at {source}; "
+                "logo will be unavailable until placed manually"
+            )
+            return
+
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            import shutil
+            shutil.copy2(str(source), str(target))
+            self.logger.info(f"Installed PGA Tour logo to {target}")
+        except Exception as e:
+            self.logger.error(f"Failed to install PGA Tour logo: {e}")
 
     def _load_logo(self) -> None:
         """Load the PGA Tour logo."""
