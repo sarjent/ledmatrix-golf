@@ -467,7 +467,7 @@ class PGATourLeaderboardPlugin(BasePlugin):
             self.logger.debug(f"Error getting score display: {e}")
             return "E"
 
-    def _get_thru_display(self, stats: List[Dict], competitor: Dict = None) -> str:
+    def _get_thru_display(self, stats: List[Dict], competitor: Dict = None) -> Optional[str]:
         """
         Get the display string for holes completed.
 
@@ -483,7 +483,7 @@ class PGATourLeaderboardPlugin(BasePlugin):
             competitor: Full competitor dict for fallback lookups
 
         Returns:
-            Thru display string (e.g., "F", "9", "14" for finished/not started, through 9, etc.)
+            Thru display string ("F" = finished, "9" = through 9, None = not started / no data)
         """
         try:
             # 1. Statistics array (some ESPN formats use this)
@@ -518,7 +518,8 @@ class PGATourLeaderboardPlugin(BasePlugin):
                                 holes_played = len(hole_scores)
                                 return 'F' if holes_played >= 18 else str(holes_played)
 
-            return "F"  # Default to finished / not started
+            # None = no data found; caller treats this as "not started" and shows no suffix
+            return None
 
         except Exception as e:
             self.logger.debug(f"Error getting thru display: {e}")
@@ -764,14 +765,14 @@ class PGATourLeaderboardPlugin(BasePlugin):
             position = player['position']
             name = player['short_name']
             score = player['score']
-            thru = player.get('thru', 'F')
+            thru = player.get('thru')
             on_course = player.get('on_course', False)
 
             # Add asterisk prefix if player is on course
             name_prefix = "*" if on_course else ""
 
             base_str = f"{position}. {name_prefix}{name} {score}"
-            thru_str = f" ({thru})" if thru and thru.upper() != 'F' else ""
+            thru_str = f" ({thru})" if thru is not None else ""
 
             content_parts.append((base_str, thru_str))
 
@@ -1063,7 +1064,7 @@ class PGATourLeaderboardPlugin(BasePlugin):
 
         name_prefix = "*" if on_course else ""
         base_str = f"{position}. {name_prefix}{name} {score}"
-        thru_str = f" ({thru})" if thru and thru.upper() != 'F' else ""
+        thru_str = f" ({thru})" if thru is not None else ""
         thru_color = (0, 128, 255)  # Blue for holes-thru info
 
         # Measure combined text width
