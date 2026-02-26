@@ -95,7 +95,7 @@ class PGATourLeaderboardPlugin(BasePlugin):
         self.fallback_players = self.config.get('fallback_players', 5)
         self.tournament_date_range = self.config.get('tournament_date_range', 7)
         self.update_interval_seconds = self.config.get('update_interval', 600)
-        self.font_size = self.config.get('font_size', 6)
+        self.font_size = self.config.get('font_size', 8)
         self.font_name = self.config.get('font_name', '4x6-font.ttf')
 
         # Parse text color
@@ -753,80 +753,92 @@ class PGATourLeaderboardPlugin(BasePlugin):
         Returns:
             PIL Image for scrolling (logo + players)
         """
-        # Calculate content width
         logo_width = self.pga_logo.width if self.pga_logo else 0
-        spacing = 6  # Increased spacing for larger logo
-
-        # Build the leaderboard text (players only, no tournament name)
-        # Each entry is (base_str, thru_str) so thru can be drawn in a different color
-        content_parts = []
-
-        for i, player in enumerate(leaderboard):
-            position = player['position']
-            name = player['short_name']
-            score = player['score']
-            thru = player.get('thru')
-            on_course = player.get('on_course', False)
-
-            # Add asterisk prefix if player is on course
-            name_prefix = "*" if on_course else ""
-
-            base_str = f"{position}. {name_prefix}{name} {score}"
-            thru_str = f" ({thru})" if thru is not None else ""
-
-            content_parts.append((base_str, thru_str))
-
-        # Join with separator (for width estimation)
+        spacing = 6
         separator = " | "
-        content_text = separator.join(b + t for b, t in content_parts)
-
-        # Estimate total width (rough approximation)
-        # Each character is roughly 6 pixels wide with this font
-        char_width = 6
-        text_width = len(content_text) * char_width
-        total_width = logo_width + spacing + text_width + self.display_width  # Add buffer for smooth scrolling
+        thru_color = (0, 128, 255)
+        separator_color = (0, 255, 0)
 
         # Calculate scroll area height (reserve space for tournament bar)
         scroll_height = self.display_height - 8
 
-        # Create the scrolling image (logo + players)
+        # Vertical row positions: player1 centred in top half, player2 in bottom half
+        half = scroll_height // 2
+        y_top = (half - self.font_size) // 2
+        y_bot = half + (half - self.font_size) // 2
+
+        # Pre-measure each player's text so we can size the image correctly
+        temp_img = Image.new('RGB', (1, 1))
+        temp_draw = ImageDraw.Draw(temp_img)
+
+        def player_strings(player):
+            on_course = player.get('on_course', False)
+            prefix = "*" if on_course else ""
+            base = f"{player['position']}. {prefix}{player['short_name']} {player['score']}"
+            thru = player.get('thru')
+            thru_s = f" ({thru})" if thru is not None else ""
+            return base, thru_s
+
+        def text_w(s):
+            bb = temp_draw.textbbox((0, 0), s, font=self.font)
+            return bb[2] - bb[0]
+
+        sep_w = text_w(separator)
+
+        # Group into pairs and compute each pair's column width
+        pairs = []
+        for i in range(0, len(leaderboard), 2):
+            p1 = leaderboard[i]
+            p2 = leaderboard[i + 1] if i + 1 < len(leaderboard) else None
+            b1, t1 = player_strings(p1)
+            b2, t2 = player_strings(p2) if p2 else ("", "")
+            w1 = text_w(b1) + (text_w(t1) if t1 else 0)
+            w2 = text_w(b2) + (text_w(t2) if t2 else 0)
+            col_w = max(w1, w2)
+            pairs.append((i, p1, b1, t1, p2, b2, t2, col_w))
+
+        total_text_w = sum(p[7] for p in pairs) + sep_w * (len(pairs) - 1)
+        total_width = logo_width + spacing + total_text_w + self.display_width
+
+        # Create the scrolling image
         img = Image.new('RGB', (total_width, scroll_height), (0, 0, 0))
         draw = ImageDraw.Draw(img)
 
-        # Start drawing - logo comes first
-        current_x = self.display_width  # Start offscreen right for smooth entry
+        # Start offscreen right for smooth entry
+        current_x = self.display_width
 
-        # Draw PGA logo at the start (vertically centered in scroll area)
+        # Draw PGA logo (vertically centered in scroll area)
         if self.pga_logo:
             logo_y = (scroll_height - self.pga_logo.height) // 2
-            img.paste(self.pga_logo, (current_x, logo_y), self.pga_logo if self.pga_logo.mode == 'RGBA' else None)
+            img.paste(self.pga_logo, (current_x, logo_y),
+                      self.pga_logo if self.pga_logo.mode == 'RGBA' else None)
             current_x += logo_width + spacing
 
-        # Draw the leaderboard content
-        y_pos = (scroll_height // 2) - (self.font_size // 2)
+        # Draw each pair as a stacked column
+        for pair_idx, (i, p1, b1, t1, p2, b2, t2, col_w) in enumerate(pairs):
+            color1 = self.highlight_color if i < 3 else self.text_color
 
-        thru_color = (0, 128, 255)  # Blue for holes-thru info
+            # Top row – player 1
+            draw.text((current_x, y_top), b1, font=self.font, fill=color1)
+            if t1:
+                bw = text_w(b1)
+                draw.text((current_x + bw, y_top), t1, font=self.font, fill=thru_color)
 
-        # Draw each part with appropriate color
-        for i, (base_str, thru_str) in enumerate(content_parts):
-            # Determine color (highlight first 3 players)
-            color = self.highlight_color if i < 3 else self.text_color
+            # Bottom row – player 2 (if present)
+            if p2:
+                color2 = self.highlight_color if (i + 1) < 3 else self.text_color
+                draw.text((current_x, y_bot), b2, font=self.font, fill=color2)
+                if t2:
+                    bw2 = text_w(b2)
+                    draw.text((current_x + bw2, y_bot), t2, font=self.font, fill=thru_color)
 
-            draw.text((current_x, y_pos), base_str, font=self.font, fill=color)
-            bbox = draw.textbbox((current_x, y_pos), base_str, font=self.font)
-            current_x += bbox[2] - bbox[0]
+            current_x += col_w
 
-            # Draw thru info in blue
-            if thru_str:
-                draw.text((current_x, y_pos), thru_str, font=self.font, fill=thru_color)
-                bbox = draw.textbbox((current_x, y_pos), thru_str, font=self.font)
-                current_x += bbox[2] - bbox[0]
-
-            # Add separator
-            if i < len(content_parts) - 1:
-                draw.text((current_x, y_pos), separator, font=self.font, fill=(0, 255, 0))
-                sep_bbox = draw.textbbox((current_x, y_pos), separator, font=self.font)
-                current_x += sep_bbox[2] - sep_bbox[0]
+            # Separator between pairs
+            if pair_idx < len(pairs) - 1:
+                draw.text((current_x, y_top), separator, font=self.font, fill=separator_color)
+                draw.text((current_x, y_bot), separator, font=self.font, fill=separator_color)
+                current_x += sep_w
 
         return img
 
@@ -998,8 +1010,14 @@ class PGATourLeaderboardPlugin(BasePlugin):
             if tournament_img:
                 images.append(tournament_img)
 
-        for i, player in enumerate(leaderboard):
-            img = self._create_player_item(player, i)
+        # Group players into pairs: 1st over 2nd, 3rd over 4th, etc.
+        for i in range(0, len(leaderboard), 2):
+            player1 = leaderboard[i]
+            if i + 1 < len(leaderboard):
+                player2 = leaderboard[i + 1]
+                img = self._create_player_pair_item(player1, i, player2, i + 1)
+            else:
+                img = self._create_player_item(player1, i)
             if img:
                 images.append(img)
 
@@ -1091,6 +1109,71 @@ class PGATourLeaderboardPlugin(BasePlugin):
         # Draw thru info in blue
         if thru_str:
             draw.text((2 + base_width, y), thru_str, font=self.font, fill=thru_color)
+
+        return img
+
+    def _create_player_pair_item(self, player1: Dict[str, Any], idx1: int,
+                                  player2: Dict[str, Any], idx2: int) -> Image.Image:
+        """
+        Create a stacked two-player item image for Vegas scroll mode.
+
+        player1 appears on the top half, player2 on the bottom half.
+        The image is display_height tall and wide enough for the longer entry.
+
+        Args:
+            player1: Top player data dictionary
+            idx1: 0-based leaderboard index for player1 (used for highlight color)
+            player2: Bottom player data dictionary
+            idx2: 0-based leaderboard index for player2 (used for highlight color)
+
+        Returns:
+            PIL Image containing both players stacked vertically
+        """
+        thru_color = (0, 128, 255)
+
+        def build_strings(player):
+            on_course = player.get('on_course', False)
+            name_prefix = "*" if on_course else ""
+            base_str = f"{player['position']}. {name_prefix}{player['short_name']} {player['score']}"
+            thru = player.get('thru')
+            thru_str = f" ({thru})" if thru is not None else ""
+            return base_str, thru_str
+
+        base1, thru1 = build_strings(player1)
+        base2, thru2 = build_strings(player2)
+
+        # Measure widths
+        temp_img = Image.new('RGB', (1, 1))
+        temp_draw = ImageDraw.Draw(temp_img)
+
+        def measure(text):
+            bb = temp_draw.textbbox((0, 0), text, font=self.font)
+            return bb[2] - bb[0]
+
+        base1_w = measure(base1)
+        thru1_w = measure(thru1) if thru1 else 0
+        base2_w = measure(base2)
+        thru2_w = measure(thru2) if thru2 else 0
+
+        text_width = max(base1_w + thru1_w, base2_w + thru2_w)
+        img = Image.new('RGB', (text_width + 4, self.display_height), (0, 0, 0))
+        draw = ImageDraw.Draw(img)
+
+        # Vertical positions: player1 centred in top half, player2 in bottom half
+        half = self.display_height // 2
+        y1 = (half - self.font_size) // 2
+        y2 = half + (half - self.font_size) // 2
+
+        color1 = self.highlight_color if idx1 < 3 else self.text_color
+        color2 = self.highlight_color if idx2 < 3 else self.text_color
+
+        draw.text((2, y1), base1, font=self.font, fill=color1)
+        if thru1:
+            draw.text((2 + base1_w, y1), thru1, font=self.font, fill=thru_color)
+
+        draw.text((2, y2), base2, font=self.font, fill=color2)
+        if thru2:
+            draw.text((2 + base2_w, y2), thru2, font=self.font, fill=thru_color)
 
         return img
 
