@@ -78,6 +78,10 @@ class PGATourLeaderboardPlugin(BasePlugin):
         # Load PGA Tour logo
         self._load_logo()
 
+        # Ensure Masters logo is installed and loaded
+        self._ensure_masters_logo_installed()
+        self._load_masters_logo()
+
         # State tracking
         self.current_tournament = None
         self.leaderboard_data = []
@@ -195,6 +199,67 @@ class PGATourLeaderboardPlugin(BasePlugin):
         except Exception as e:
             self.logger.error(f"Error loading PGA Tour logo: {e}")
             self.pga_logo = None
+
+    def _ensure_masters_logo_installed(self) -> None:
+        """Copy the bundled masters-logo.png to the core assets directory if not present."""
+        target = Path("assets/sports/pga_logos/masters_logo.png")
+        if target.exists():
+            return
+
+        source = Path(__file__).parent / "masters-logo.png"
+        if not source.exists():
+            self.logger.warning(
+                f"Bundled Masters logo not found at {source}; "
+                "Masters logo will be unavailable"
+            )
+            return
+
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            import shutil
+            shutil.copy2(str(source), str(target))
+            self.logger.info(f"Installed Masters Tournament logo to {target}")
+        except Exception as e:
+            self.logger.error(f"Failed to install Masters Tournament logo: {e}")
+
+    def _load_masters_logo(self) -> None:
+        """Load The Masters Tournament logo, sized identically to the PGA logo."""
+        logo_path = Path("assets/sports/pga_logos/masters_logo.png")
+        if not logo_path.exists():
+            self.logger.warning(f"Masters logo not found at {logo_path}")
+            self.masters_logo = None
+            return
+
+        try:
+            raw = Image.open(logo_path)
+            if raw.mode != 'RGBA':
+                raw = raw.convert('RGBA')
+
+            bbox = raw.getbbox()
+            if bbox:
+                raw = raw.crop(bbox)
+
+            scroll_height = self.display_height - 8
+            max_h = scroll_height - 2
+            max_w = self.display_width // 2
+            raw.thumbnail((max_w, max_h), Image.Resampling.LANCZOS)
+
+            self.masters_logo = raw
+            self.logger.debug(
+                f"Loaded Masters logo from {logo_path} "
+                f"(size: {self.masters_logo.width}x{self.masters_logo.height})"
+            )
+        except Exception as e:
+            self.logger.error(f"Error loading Masters logo: {e}")
+            self.masters_logo = None
+
+    def _get_active_logo(self, tournament: Optional[Dict]) -> Optional[Image.Image]:
+        """Return the Masters logo for The Masters, otherwise the PGA Tour logo."""
+        if tournament:
+            name = tournament.get('name', '').lower()
+            if 'masters' in name and self.masters_logo:
+                return self.masters_logo
+        return self.pga_logo
 
     def update(self) -> None:
         """
@@ -753,7 +818,8 @@ class PGATourLeaderboardPlugin(BasePlugin):
         Returns:
             PIL Image for scrolling (logo + players)
         """
-        logo_width = self.pga_logo.width if self.pga_logo else 0
+        active_logo = self._get_active_logo(tournament)
+        logo_width = active_logo.width if active_logo else 0
         spacing = 6
         separator = " | "
         thru_color = (0, 128, 255)
@@ -807,11 +873,11 @@ class PGATourLeaderboardPlugin(BasePlugin):
         # Start offscreen right for smooth entry
         current_x = self.display_width
 
-        # Draw PGA logo (vertically centered in scroll area)
-        if self.pga_logo:
-            logo_y = (scroll_height - self.pga_logo.height) // 2
-            img.paste(self.pga_logo, (current_x, logo_y),
-                      self.pga_logo if self.pga_logo.mode == 'RGBA' else None)
+        # Draw logo (vertically centered in scroll area)
+        if active_logo:
+            logo_y = (scroll_height - active_logo.height) // 2
+            img.paste(active_logo, (current_x, logo_y),
+                      active_logo if active_logo.mode == 'RGBA' else None)
             current_x += logo_width + spacing
 
         # Draw each pair as a stacked column
@@ -997,11 +1063,12 @@ class PGATourLeaderboardPlugin(BasePlugin):
 
         images = []
 
-        # Prepend PGA Tour logo
-        if self.pga_logo:
-            logo_canvas = Image.new('RGB', (self.pga_logo.width, self.display_height), (0, 0, 0))
-            logo_y = (self.display_height - self.pga_logo.height) // 2
-            logo_canvas.paste(self.pga_logo, (0, logo_y), self.pga_logo)
+        # Prepend logo (Masters logo for The Masters, otherwise PGA Tour logo)
+        active_logo = self._get_active_logo(tournament)
+        if active_logo:
+            logo_canvas = Image.new('RGB', (active_logo.width, self.display_height), (0, 0, 0))
+            logo_y = (self.display_height - active_logo.height) // 2
+            logo_canvas.paste(active_logo, (0, logo_y), active_logo)
             images.append(logo_canvas)
 
         # Prepend tournament name item
@@ -1236,6 +1303,7 @@ class PGATourLeaderboardPlugin(BasePlugin):
         self.previous_tournament = None
         self.scroll_image = None
         self.pga_logo = None
+        self.masters_logo = None
 
         # Clear scroll helper cache
         if self.scroll_helper:
