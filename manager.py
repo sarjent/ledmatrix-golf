@@ -454,7 +454,24 @@ class PGATourLeaderboardPlugin(BasePlugin):
             for competitor in sorted_competitors[:self.max_players]:
                 try:
                     athlete = competitor.get('athlete', {})
+                    team = competitor.get('team', {})
                     stats = competitor.get('statistics', [])
+
+                    # Team events (e.g. Zurich Classic) have no 'athlete' field; the name
+                    # is on the 'team' object or directly on the competitor.
+                    display_name = (
+                        athlete.get('displayName')
+                        or team.get('displayName')
+                        or competitor.get('displayName', 'Unknown')
+                    )
+                    short_name = (
+                        athlete.get('shortName')
+                        or athlete.get('displayName')
+                        or team.get('shortDisplayName')
+                        or team.get('displayName')
+                        or competitor.get('shortDisplayName')
+                        or competitor.get('displayName', 'Unknown')
+                    )
 
                     # Extract score/position (prefer 'order' field, fall back to 'sortOrder')
                     position = competitor.get('order') or competitor.get('sortOrder', '')
@@ -468,8 +485,8 @@ class PGATourLeaderboardPlugin(BasePlugin):
 
                     player_data = {
                         'position': position,
-                        'name': athlete.get('displayName', 'Unknown'),
-                        'short_name': athlete.get('shortName', athlete.get('displayName', 'Unknown')),
+                        'name': display_name,
+                        'short_name': short_name,
                         'score': score_display,
                         'thru': thru_display,
                         'on_course': is_on_course,
@@ -703,7 +720,23 @@ class PGATourLeaderboardPlugin(BasePlugin):
             for competitor in sorted_competitors[:self.fallback_players]:
                 try:
                     athlete = competitor.get('athlete', {})
+                    team = competitor.get('team', {})
                     stats = competitor.get('statistics', [])
+
+                    # Team events have no 'athlete' field; name is on 'team' or competitor directly.
+                    display_name = (
+                        athlete.get('displayName')
+                        or team.get('displayName')
+                        or competitor.get('displayName', 'Unknown')
+                    )
+                    short_name = (
+                        athlete.get('shortName')
+                        or athlete.get('displayName')
+                        or team.get('shortDisplayName')
+                        or team.get('displayName')
+                        or competitor.get('shortDisplayName')
+                        or competitor.get('displayName', 'Unknown')
+                    )
 
                     # Extract score/position (prefer 'order' field, fall back to 'sortOrder')
                     position = competitor.get('order') or competitor.get('sortOrder', '')
@@ -717,8 +750,8 @@ class PGATourLeaderboardPlugin(BasePlugin):
 
                     player_data = {
                         'position': position,
-                        'name': athlete.get('displayName', 'Unknown'),
-                        'short_name': athlete.get('shortName', athlete.get('displayName', 'Unknown')),
+                        'name': display_name,
+                        'short_name': short_name,
                         'score': score_display,
                         'thru': thru_display,
                         'on_course': is_on_course,
