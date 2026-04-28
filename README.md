@@ -4,22 +4,18 @@ A custom plugin for the [LEDMatrix project](https://github.com/ryderdamen/LEDMat
 
 ## Features
 
-- 📊 Displays top 10 players (configurable) from current PGA Tour tournaments
-- 🏌️ **v1.4.2**: Increased PGA logo size (36px wide) for better visibility, matching news ticker style
-- 🎯 **v1.4.1**: Moved PGA logo to scroll with players, centered tournament name at bottom
-- 🎯 **v1.4.0**: Split-screen display - players scroll on top, tournament name persistent at bottom
-- ⛳ **v1.3.0**: Added holes completed display and asterisk (*) indicator for players currently on the course
-- 🎬 **v1.2.0**: Added horizontal scrolling display with PGA Tour logo
-- 🐛 **v1.2.2**: Improved fallback to reliably find most recent completed tournament
-- 🐛 **v1.2.1**: Fixed scrolling implementation to work correctly with ScrollHelper
-- 🔙 **v1.1.0**: Falls back to showing top 5 from the most recent completed tournament when no current tournament is available
-- 🐛 **v1.1.1**: Fixed API endpoint to use scoreboard instead of leaderboard
-- 🗓️ Automatically filters tournaments within a configurable date range (default: 7 days)
-- 🔄 Configurable refresh interval (default: 10 minutes, adjustable up to 60 minutes)
+- 📊 Live PGA Tour leaderboard via ESPN's public API — no API key required
+- 🏌️ Displays top 10 players (configurable) with position, name, score, and holes completed
+- ⛳ Asterisk (`*`) indicator for players currently on the course
+- 🏆 PGA Tour logo leads the scroll; automatically switches to the Masters Tournament logo during The Masters
+- 🎨 Round status bar color-coded by state: green (live), amber (suspended), blue (round done), grey (final)
+- 🤝 Handles team-format events (e.g. Zurich Classic) where players compete as pairs
+- 🔙 Falls back to the most recent completed tournament when no event is active (searches up to 30 days back)
+- 🖥️ Vegas scroll mode with stacked two-player pair images
+- 🗓️ Automatically filters to tournaments within a configurable date range (default: 7 days)
+- 🔄 Configurable refresh interval (default: 10 minutes)
 - 🎨 User-configurable font size, font style, and colors
-- ⭐ Highlights top 3 players with a different color (gold by default)
-- 🚀 Uses ESPN's public API for real-time tournament data
-- 💾 Built-in caching to minimize API requests
+- ⭐ Top 3 players highlighted in gold by default
 
 ## Requirements
 
