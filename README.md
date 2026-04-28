@@ -312,6 +312,10 @@ This plugin is provided as-is for use with the LEDMatrix project. Please respect
 For issues specific to this plugin, please open an issue in this repository.
 For LEDMatrix issues, see the [LEDMatrix documentation](https://github.com/ryderdamen/LEDMatrix).
 
+If this plugin is useful to you, consider buying me a coffee!
+
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-sarjent-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/sarjent)
+
 ---
 
 **Enjoy tracking your favorite PGA Tour players on your LED matrix! ⛳**
