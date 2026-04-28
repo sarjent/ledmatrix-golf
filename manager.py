@@ -292,6 +292,7 @@ class PGATourLeaderboardPlugin(BasePlugin):
 
             if not data:
                 self.logger.warning("Failed to fetch PGA Tour data from ESPN")
+                self.last_update = datetime.now()
                 return
 
             # Process the data
@@ -652,8 +653,7 @@ class PGATourLeaderboardPlugin(BasePlugin):
             today = datetime.now()
 
             # Search backwards day by day to find most recent completed tournament
-            # Check every 3 days to balance thoroughness with API calls
-            for days_back in range(1, 31, 3):  # Check 1, 4, 7, 10, 13...28 days back
+            for days_back in range(1, 31):
                 date_to_check = today - timedelta(days=days_back)
                 date_str = date_to_check.strftime('%Y%m%d')
 
@@ -981,11 +981,17 @@ class PGATourLeaderboardPlugin(BasePlugin):
         x_pos = (self.display_width - text_width) // 2
         y_pos = 1  # Centered vertically in 8px bar for 6px font
 
-        # Color: green when a round is live, red for all other statuses
-        if 'live' in round_status.lower():
-            bar_color = (0, 200, 0)
+        rs = round_status.lower()
+        if 'live' in rs:
+            bar_color = (0, 200, 0)       # green  — round in progress
+        elif 'susp' in rs:
+            bar_color = (200, 120, 0)     # amber  — suspended
+        elif 'done' in rs:
+            bar_color = (80, 120, 180)    # blue   — round complete
+        elif 'final' in rs:
+            bar_color = (130, 130, 130)   # grey   — tournament finished
         else:
-            bar_color = (200, 50, 50)
+            bar_color = (120, 120, 120)   # dim    — pre/scheduled
 
         draw.text((x_pos, y_pos), tournament_text, font=self.font, fill=bar_color)
 
@@ -1149,11 +1155,17 @@ class PGATourLeaderboardPlugin(BasePlugin):
         img = Image.new('RGB', (text_width + 4, self.display_height), (0, 0, 0))
         draw = ImageDraw.Draw(img)
 
-        # Color: green when a round is live, red for all other statuses
-        if 'live' in round_status.lower():
+        rs = round_status.lower()
+        if 'live' in rs:
             item_color = (0, 200, 0)
+        elif 'susp' in rs:
+            item_color = (200, 120, 0)
+        elif 'done' in rs:
+            item_color = (80, 120, 180)
+        elif 'final' in rs:
+            item_color = (130, 130, 130)
         else:
-            item_color = (200, 50, 50)
+            item_color = (120, 120, 120)
 
         y = (self.display_height - self.font_size) // 2
         draw.text((2, y), text, font=self.font, fill=item_color)
@@ -1317,14 +1329,17 @@ class PGATourLeaderboardPlugin(BasePlugin):
         """Handle configuration changes."""
         super().on_config_change(new_config)
 
-        # Reload configuration
+        # Cache current font settings before reloading so we can detect changes
+        old_font_name = self.font_name
+        old_font_size = self.font_size
+
         self._load_config()
 
-        # Reload fonts if font settings changed
-        new_font_name = new_config.get('font_name', '4x6-font.ttf')
-        new_font_size = new_config.get('font_size', 6)
-        if new_font_name != self.font_name or new_font_size != self.font_size:
+        if self.font_name != old_font_name or self.font_size != old_font_size:
             self._load_fonts()
+
+        # Invalidate cached scroll image so display redraws immediately
+        self.scroll_image = None
 
         self.logger.info("Configuration updated, reloading settings")
 

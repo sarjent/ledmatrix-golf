@@ -29,42 +29,19 @@ A custom plugin for the [LEDMatrix project](https://github.com/ryderdamen/LEDMat
 
 ## Installation
 
-### 1. Clone this repository to your Raspberry Pi
+### Via the LEDMatrix Plugin Store (recommended)
 
-```bash
-# Navigate to a location outside the LEDMatrix project
-cd ~
-git clone <your-repo-url> ledmatrix-golf
-```
-
-### 2. Install the plugin in LEDMatrix
-
-Option A: Using the web UI (recommended)
 1. Open the LEDMatrix web interface at `http://your-pi:5000`
-2. Navigate to the Plugins section
-3. Click "Add Plugin Repository"
-4. Enter the path: `/home/pi/ledmatrix-golf` (or wherever you cloned it)
-5. Click "Load Plugin"
+2. Navigate to **Plugins → Store**
+3. Search for **PGA Tour Leaderboard** and click **Install**
 
-Option B: Manual installation
-```bash
-# Copy the plugin to the LEDMatrix plugins directory
-cd /path/to/LEDMatrix
-mkdir -p plugins/ledmatrix-golf
-cp -r ~/ledmatrix-golf/* plugins/ledmatrix-golf/
+The store handles all dependencies automatically.
 
-# Or create a symbolic link
-ln -s ~/ledmatrix-golf plugins/ledmatrix-golf
-```
+### Manual installation
 
-### 3. Install dependencies
-
-The LEDMatrix system will automatically install dependencies from `requirements.txt` when loading the plugin.
-
-If you need to install manually:
 ```bash
 cd /path/to/LEDMatrix
-pip3 install -r plugins/ledmatrix-golf/requirements.txt
+pip3 install -r plugins/pga-tour-leaderboard/requirements.txt
 ```
 
 ### 4. Configure the plugin
@@ -258,7 +235,7 @@ assets/sports/pga_logos/pga_logo.png
    chmod 644 /path/to/LEDMatrix/assets/sports/pga_logos/pga_logo.png
    ```
 
-**Note**: See [PGA_LOGO_README.md](PGA_LOGO_README.md) for detailed logo setup instructions, troubleshooting, and requirements.
+**Note**: The logos are bundled with the plugin and installed automatically on first run. If the logo file is not found the plugin logs a warning and displays the leaderboard without it.
 
 If the logo file is not found, the plugin will log a warning and display the leaderboard without the logo.
 
@@ -267,16 +244,14 @@ If the logo file is not found, the plugin will log a warning and display the lea
 ### Project Structure
 
 ```
-ledmatrix-golf/
+plugins/pga-tour-leaderboard/
 ├── manifest.json           # Plugin metadata and entry point
 ├── config_schema.json      # Configuration schema for web UI
-├── manager.py             # Main plugin implementation
-├── requirements.txt       # Python dependencies
-├── README.md             # This file
-├── PGA_LOGO_README.md    # PGA Tour logo setup instructions
-├── plan.md               # Original requirements
-├── test_api.py           # API testing script
-└── quick_test.sh         # Quick bash test script
+├── manager.py              # Main plugin implementation
+├── requirements.txt        # Python dependencies
+├── README.md               # This file
+├── pga-logo.png            # PGA Tour logo (auto-installed to assets/)
+└── masters-logo.png        # Masters Tournament logo (auto-installed to assets/)
 ```
 
 ### Testing
