@@ -59,6 +59,7 @@ class PGATourLeaderboardPlugin(BasePlugin):
         # Configure scrolling for smooth, readable display
         self.scroll_helper.set_scroll_speed(30.0)  # 30 pixels per second for readability
         self.scroll_helper.set_target_fps(120)  # 120 FPS for smooth scrolling
+        self.enable_scrolling = True  # Signal display controller to use high-FPS loop
 
         self.logo_helper = LogoHelper(
             display_width=self.display_width,
@@ -809,6 +810,10 @@ class PGATourLeaderboardPlugin(BasePlugin):
                 scroll_height = self.display_height - 8  # Reserve 8 pixels for tournament bar
                 self.scroll_helper.display_height = scroll_height
                 self.scroll_helper.set_scrolling_image(self.scroll_image)
+
+            # Reset scroll when a pass finishes so rotation re-entry starts fresh
+            if self.scroll_helper.is_scroll_complete():
+                self.scroll_helper.reset_scroll()
 
             # Update scroll position
             self.scroll_helper.update_scroll_position()
